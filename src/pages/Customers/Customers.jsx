@@ -115,6 +115,7 @@ function Customers() {
         fullName.includes(term) ||
         customer.contactNumber.toLowerCase().includes(term) ||
         customer.address.toLowerCase().includes(term) ||
+        customer.displayId.toLowerCase().includes(term) ||
         customer.id.toLowerCase().includes(term)
       );
     });
@@ -371,7 +372,7 @@ function Customers() {
                   filteredCustomers.map((customer) => (
                     <tr key={customer.id} className="text-sm text-slate-700">
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                        {customer.id}
+                        {customer.displayId}
                       </td>
                       <td className="px-6 py-4 font-medium text-slate-900">
                         {customer.firstName} {customer.lastName}
@@ -462,7 +463,7 @@ function Customers() {
                       Customer ID
                     </p>
                     <p className="mt-2 break-all font-mono text-sm text-slate-700">
-                      {selectedCustomer.id}
+                      {selectedCustomer.displayId}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">

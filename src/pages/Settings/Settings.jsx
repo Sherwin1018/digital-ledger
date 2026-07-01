@@ -525,8 +525,8 @@ function Settings() {
                 <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl bg-slate-900 p-4 text-sm text-white opacity-0 shadow-2xl transition group-hover:opacity-100">
                   <p className="font-semibold">Backup Notes</p>
                   <p className="mt-2 text-slate-300">
-                    Backups include `customers`, `debts`, `payments`,
-                    `storeProfile`, and `adminProfile`.
+                    Backups include customers, debts, payments, numeric ID counters,
+                    store profile, and admin profile.
                   </p>
                   <p className="mt-2 text-slate-300">
                     Restore replaces current data with the contents of the selected
@@ -542,8 +542,8 @@ function Settings() {
             <div className="mt-6 flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <p className="text-sm font-semibold text-slate-900">Create a Backup File</p>
               <p className="mt-2 text-sm text-slate-500">
-                Download customers, debts, payments, store settings, and admin
-                profile into one restore-ready JSON file.
+                Download customers, debts, payments, numeric ID counters, store
+                settings, and admin profile into one restore-ready JSON file.
               </p>
               <div className="mt-auto pt-6">
                 <button
@@ -576,7 +576,7 @@ function Settings() {
               <p className="text-sm font-semibold text-slate-900">Restore From Backup File</p>
               <p className="mt-2 text-sm text-slate-500">
                 Choose a previously downloaded Digital Ledger backup JSON file to
-                restore customers, debts, payments, and settings.
+                restore customers, debts, payments, numeric ID counters, and settings.
               </p>
               <div className="mt-auto pt-6">
                 <button
@@ -627,8 +627,8 @@ function Settings() {
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
                   You are about to restore from{" "}
                   <span className="font-semibold">{restoreFileName || "selected backup file"}</span>.
-                  This will overwrite the current customers, debts, payments, and
-                  settings data.
+                  This will overwrite the current customers, debts, payments, numeric
+                  ID counters, and settings data.
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

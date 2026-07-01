@@ -13,7 +13,7 @@ import { db, firebaseConfigError } from "../firebase/firebase";
 const SETTINGS_COLLECTION = "settings";
 const STORE_PROFILE_DOCUMENT = "storeProfile";
 const ADMIN_PROFILE_DOCUMENT = "adminProfile";
-const BACKUP_COLLECTIONS = ["customers", "debts", "payments"];
+const BACKUP_COLLECTIONS = ["customers", "debts", "payments", "systemCounters"];
 
 function ensureFirestore() {
   if (!db) {

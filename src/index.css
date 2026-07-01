@@ -1,1 +1,49 @@
 @import "tailwindcss";
+
+@keyframes page-transition-fade {
+  0% {
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  78% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes page-transition-icon {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.82) rotate(-8deg);
+  }
+
+  35% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08) rotate(0deg);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.92) rotate(6deg);
+  }
+}
+
+.page-transition-overlay {
+  animation: page-transition-fade 1s ease both;
+}
+
+.page-transition-icon {
+  animation: page-transition-icon 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

@@ -1,16 +1,17 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   getDocs,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "../firebase/firebase";
+import { formatNumericId, getNextDisplayNumber } from "./idService";
 
 const CUSTOMERS_COLLECTION = "customers";
 
@@ -35,6 +36,8 @@ function mapCustomerSnapshot(snapshot) {
 
   return {
     id: snapshot.id,
+    customerNumber: Number(data.customerNumber || 0),
+    displayId: formatNumericId("CUST", data.customerNumber, snapshot.id),
     firstName: data.firstName || "",
     lastName: data.lastName || "",
     contactNumber: data.contactNumber || "",
@@ -90,15 +93,22 @@ async function addCustomer(customer) {
     throw new Error("A customer with the same name and contact number already exists.");
   }
 
-  await addDoc(collection(db, CUSTOMERS_COLLECTION), {
-    firstName: customer.firstName.trim(),
-    lastName: customer.lastName.trim(),
-    contactNumber: normalizeContactNumber(customer.contactNumber),
-    address: customer.address.trim(),
-    currentBalance: Number(customer.currentBalance || 0),
-    normalizedFirstName: normalizeName(customer.firstName),
-    normalizedLastName: normalizeName(customer.lastName),
-    createdAt: serverTimestamp(),
+  const customerRef = doc(collection(db, CUSTOMERS_COLLECTION));
+
+  await runTransaction(db, async (transaction) => {
+    const customerNumber = await getNextDisplayNumber(transaction, "customers");
+
+    transaction.set(customerRef, {
+      customerNumber,
+      firstName: customer.firstName.trim(),
+      lastName: customer.lastName.trim(),
+      contactNumber: normalizeContactNumber(customer.contactNumber),
+      address: customer.address.trim(),
+      currentBalance: Number(customer.currentBalance || 0),
+      normalizedFirstName: normalizeName(customer.firstName),
+      normalizedLastName: normalizeName(customer.lastName),
+      createdAt: serverTimestamp(),
+    });
   });
 }
 

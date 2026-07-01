@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import PageTransitionOverlay from "./PageTransitionOverlay";
 
 function DashboardLayout({ children }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [transitionState, setTransitionState] = useState({
+    visible: false,
+    pathname: location.pathname,
+    loginSuccess: false,
+  });
 
   useEffect(() => {
     const handleResize = () => {
@@ -32,6 +41,33 @@ function DashboardLayout({ children }) {
     setMobileOpen((prev) => !prev);
   };
 
+  useEffect(() => {
+    const loginSuccess = Boolean(location.state?.loginSuccess);
+    const showTimer = window.setTimeout(() => {
+      setTransitionState({
+        visible: true,
+        pathname: location.pathname,
+        loginSuccess,
+      });
+    }, 0);
+
+    if (loginSuccess) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+
+    const hideTimer = window.setTimeout(() => {
+      setTransitionState((current) => ({
+        ...current,
+        visible: false,
+      }));
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(showTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [location.pathname, location.state, navigate]);
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Sidebar
@@ -56,6 +92,13 @@ function DashboardLayout({ children }) {
 
         <main className="p-6">{children}</main>
       </div>
+
+      {transitionState.visible && (
+        <PageTransitionOverlay
+          pathname={transitionState.pathname}
+          loginSuccess={transitionState.loginSuccess}
+        />
+      )}
 
       {mobileOpen && (
         <div

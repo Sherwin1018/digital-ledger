@@ -9,6 +9,7 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "../firebase/firebase";
+import { formatNumericId, getNextDisplayNumber } from "./idService";
 
 const DEBTS_COLLECTION = "debts";
 const CUSTOMERS_COLLECTION = "customers";
@@ -21,8 +22,8 @@ function ensureFirestore() {
   }
 }
 
-function formatTransactionId(documentId) {
-  return `DT-${documentId.slice(0, 8).toUpperCase()}`;
+function formatTransactionId(debtNumber, documentId) {
+  return formatNumericId("DT", debtNumber, documentId);
 }
 
 function mapDebtSnapshot(snapshot) {
@@ -30,7 +31,8 @@ function mapDebtSnapshot(snapshot) {
 
   return {
     id: snapshot.id,
-    transactionId: data.transactionId || formatTransactionId(snapshot.id),
+    debtNumber: Number(data.debtNumber || 0),
+    transactionId: data.transactionId || formatTransactionId(data.debtNumber, snapshot.id),
     customerId: data.customerId || "",
     customerName: data.customerName || "",
     product: data.product || "",
@@ -88,6 +90,7 @@ async function addDebt(entry) {
     const customerData = customerSnapshot.data();
     const currentBalance = Number(customerData.currentBalance || 0);
     const runningBalance = currentBalance + total;
+    const debtNumber = await getNextDisplayNumber(transaction, "debts");
     const customerName =
       `${customerData.firstName || ""} ${customerData.lastName || ""}`.trim() ||
       entry.customerName ||
@@ -95,6 +98,7 @@ async function addDebt(entry) {
 
     transaction.set(debtRef, {
       customerId: entry.customerId,
+      debtNumber,
       customerName,
       product: entry.product.trim(),
       quantity,
@@ -102,7 +106,7 @@ async function addDebt(entry) {
       total,
       runningBalance,
       remarks: entry.remarks.trim(),
-      transactionId: formatTransactionId(debtRef.id),
+      transactionId: formatTransactionId(debtNumber, debtRef.id),
       date: Timestamp.now(),
     });
 

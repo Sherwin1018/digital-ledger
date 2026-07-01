@@ -8,6 +8,7 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "../firebase/firebase";
+import { formatNumericId, getNextDisplayNumber } from "./idService";
 
 const PAYMENTS_COLLECTION = "payments";
 const CUSTOMERS_COLLECTION = "customers";
@@ -20,8 +21,8 @@ function ensureFirestore() {
   }
 }
 
-function formatTransactionId(documentId) {
-  return `PM-${documentId.slice(0, 8).toUpperCase()}`;
+function formatTransactionId(paymentNumber, documentId) {
+  return formatNumericId("PM", paymentNumber, documentId);
 }
 
 function mapPaymentSnapshot(snapshot) {
@@ -29,7 +30,8 @@ function mapPaymentSnapshot(snapshot) {
 
   return {
     id: snapshot.id,
-    transactionId: data.transactionId || formatTransactionId(snapshot.id),
+    paymentNumber: Number(data.paymentNumber || 0),
+    transactionId: data.transactionId || formatTransactionId(data.paymentNumber, snapshot.id),
     customerId: data.customerId || "",
     customerName: data.customerName || "",
     amount: Number(data.amount || 0),
@@ -87,6 +89,7 @@ async function addPayment(entry) {
     }
 
     const remainingBalance = previousBalance - amount;
+    const paymentNumber = await getNextDisplayNumber(transaction, "payments");
     const customerName =
       `${customerData.firstName || ""} ${customerData.lastName || ""}`.trim() ||
       entry.customerName ||
@@ -94,12 +97,13 @@ async function addPayment(entry) {
 
     transaction.set(paymentRef, {
       customerId: entry.customerId,
+      paymentNumber,
       customerName,
       amount,
       previousBalance,
       remainingBalance,
       remarks: entry.remarks.trim(),
-      transactionId: formatTransactionId(paymentRef.id),
+      transactionId: formatTransactionId(paymentNumber, paymentRef.id),
       date: Timestamp.now(),
     });
 

@@ -24,7 +24,7 @@ function Login() {
 
     try {
       await login(email, password);
-      navigate(redirectTo, { replace: true });
+      navigate(redirectTo, { replace: true, state: { loginSuccess: true } });
     } catch (error) {
       setError(getFirebaseErrorMessage(error, "Invalid email or password. Please try again."));
     } finally {

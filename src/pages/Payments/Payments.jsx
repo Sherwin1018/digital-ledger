@@ -335,7 +335,7 @@ function Payments() {
                         <option value="">Select a customer</option>
                         {customers.map((customer) => (
                           <option key={customer.id} value={customer.id}>
-                            {customer.firstName} {customer.lastName}
+                            {customer.displayId} - {customer.firstName} {customer.lastName}
                           </option>
                         ))}
                       </select>
