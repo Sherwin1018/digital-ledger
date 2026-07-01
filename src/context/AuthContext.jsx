@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   onAuthStateChanged,
   EmailAuthProvider,
@@ -15,8 +9,7 @@ import {
   updatePassword,
 } from "firebase/auth";
 import { auth, firebaseConfigError } from "../firebase/firebase";
-
-const AuthContext = createContext(null);
+import AuthContext from "./AuthContextObject";
 
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -24,7 +17,6 @@ function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!auth) {
-      setLoading(false);
       return undefined;
     }
 
@@ -71,14 +63,4 @@ function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-function useAuth() {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-
-  return context;
-}
-
-export { AuthProvider, useAuth };
+export { AuthProvider };

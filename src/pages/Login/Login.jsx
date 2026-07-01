@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AlertCircle, KeyRound, Mail, WalletCards } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
 function Login() {

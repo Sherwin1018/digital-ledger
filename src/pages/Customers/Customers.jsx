@@ -146,15 +146,6 @@ function Customers() {
     });
   }, [customers, form.contactNumber, form.firstName, form.lastName, modalMode]);
 
-  useEffect(() => {
-    if (firebaseConfigError) {
-      setLoading(false);
-      return;
-    }
-
-    loadCustomers();
-  }, []);
-
   async function loadCustomers() {
     setLoading(true);
     setFetchError("");
@@ -168,6 +159,15 @@ function Customers() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (firebaseConfigError) {
+      return;
+    }
+
+    const timer = window.setTimeout(loadCustomers, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   function closeModal() {
     setIsModalOpen(false);

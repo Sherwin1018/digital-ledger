@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
 import {
   CalendarRange,
   FileSpreadsheet,
@@ -91,6 +90,15 @@ function isWithinRange(timestamp, range) {
   return date && date >= range.start && date <= range.end;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function Reports() {
   const [customers, setCustomers] = useState([]);
   const [debts, setDebts] = useState([]);
@@ -98,15 +106,6 @@ function Reports() {
   const [reportType, setReportType] = useState("daily");
   const [loading, setLoading] = useState(!firebaseConfigError);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (firebaseConfigError) {
-      setLoading(false);
-      return;
-    }
-
-    loadData();
-  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -128,6 +127,15 @@ function Reports() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (firebaseConfigError) {
+      return;
+    }
+
+    const timer = window.setTimeout(loadData, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const reportData = useMemo(() => {
     const range = getRangeBounds(reportType);
@@ -193,32 +201,67 @@ function Reports() {
   const rangeLabel = `${formatDate(reportData.range.start)} - ${formatDate(reportData.range.end)}`;
 
   function handleExcelExport() {
-    const workbook = XLSX.utils.book_new();
-    const sheetData = [
-      ["Report Type", reportOptions.find((item) => item.value === reportType)?.label || reportType],
-      ["Range", rangeLabel],
-      [],
-      ["Metric", "Value"],
-      ["Total Debt", reportData.totalDebt],
-      ["Total Payments", reportData.totalPayments],
-      ["Outstanding Balance", reportData.outstandingBalance],
-      ["Transactions", reportData.transactions.length],
-      [],
-      ["Type", "Transaction ID", "Customer", "Amount", "Balance After", "Date", "Remarks"],
-      ...reportData.transactions.map((item) => [
-        item.type,
-        item.transactionId,
-        item.customerName,
-        Number(item.amount || 0),
-        Number(item.balanceAfter || 0),
-        formatDate(item.date),
-        item.remarks,
-      ]),
-    ];
+    const rows = reportData.transactions
+      .map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.type)}</td>
+            <td>${escapeHtml(item.transactionId)}</td>
+            <td>${escapeHtml(item.customerName)}</td>
+            <td>${Number(item.amount || 0)}</td>
+            <td>${Number(item.balanceAfter || 0)}</td>
+            <td>${escapeHtml(formatDate(item.date))}</td>
+            <td>${escapeHtml(item.remarks)}</td>
+          </tr>
+        `,
+      )
+      .join("");
+    const reportLabel =
+      reportOptions.find((item) => item.value === reportType)?.label || reportType;
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+        </head>
+        <body>
+          <table>
+            <tr><td><strong>Report Type</strong></td><td>${escapeHtml(reportLabel)}</td></tr>
+            <tr><td><strong>Range</strong></td><td>${escapeHtml(rangeLabel)}</td></tr>
+            <tr></tr>
+            <tr><td><strong>Total Debt</strong></td><td>${reportData.totalDebt}</td></tr>
+            <tr><td><strong>Total Payments</strong></td><td>${reportData.totalPayments}</td></tr>
+            <tr><td><strong>Outstanding Balance</strong></td><td>${reportData.outstandingBalance}</td></tr>
+            <tr><td><strong>Transactions</strong></td><td>${reportData.transactions.length}</td></tr>
+          </table>
+          <table border="1">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Transaction ID</th>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Balance After</th>
+                <th>Date</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], {
+      type: "application/vnd.ms-excel;charset=utf-8",
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
 
-    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-    XLSX.writeFile(workbook, `digital-ledger-${reportType}-report.xlsx`);
+    link.href = url;
+    link.download = `digital-ledger-${reportType}-report.xls`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   }
 
   function handlePdfExport() {

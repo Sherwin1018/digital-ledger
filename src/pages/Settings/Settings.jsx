@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  DatabaseBackup,
   Download,
   Info,
   KeyRound,
@@ -10,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { firebaseConfigError } from "../../firebase/firebase";
 import {
   createBackupSnapshot,
@@ -118,15 +117,6 @@ function Settings() {
   const [restorePayload, setRestorePayload] = useState(null);
   const [restoreFileName, setRestoreFileName] = useState("");
 
-  useEffect(() => {
-    if (firebaseConfigError) {
-      setLoading(false);
-      return;
-    }
-
-    loadSettings();
-  }, []);
-
   async function loadSettings() {
     setLoading(true);
     setPageError("");
@@ -145,6 +135,15 @@ function Settings() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (firebaseConfigError) {
+      return;
+    }
+
+    const timer = window.setTimeout(loadSettings, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function handleStoreSubmit(event) {
     event.preventDefault();

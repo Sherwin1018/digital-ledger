@@ -140,15 +140,6 @@ function Dashboard() {
   const [loading, setLoading] = useState(!firebaseConfigError);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (firebaseConfigError) {
-      setLoading(false);
-      return;
-    }
-
-    loadAnalytics();
-  }, []);
-
   async function loadAnalytics() {
     setLoading(true);
     setError("");
@@ -171,6 +162,15 @@ function Dashboard() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (firebaseConfigError) {
+      return;
+    }
+
+    const timer = window.setTimeout(loadAnalytics, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const analytics = useMemo(() => {
     const today = new Date();

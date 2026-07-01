@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PackagePlus, Plus, ReceiptText, Search, UserRound, X } from "lucide-react";
+import { PackagePlus, Plus, ReceiptText, Search, X } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
@@ -76,15 +76,6 @@ function Debts() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
-  useEffect(() => {
-    if (firebaseConfigError) {
-      setLoading(false);
-      return;
-    }
-
-    loadData();
-  }, []);
-
   const filteredDebts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
@@ -134,6 +125,15 @@ function Debts() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (firebaseConfigError) {
+      return;
+    }
+
+    const timer = window.setTimeout(loadData, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   function openAddModal() {
     setForm(emptyForm);

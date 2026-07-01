@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Mail, Save, UserCircle, UserRound, X } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getAdminProfile, saveAdminProfile } from "../../services/profileService";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
@@ -54,16 +54,7 @@ function Profile() {
   const [pageError, setPageError] = useState("");
   const [updatedAt, setUpdatedAt] = useState(null);
 
-  useEffect(() => {
-    if (firebaseConfigError || !user) {
-      setLoading(false);
-      return;
-    }
-
-    loadProfile();
-  }, [user]);
-
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     setLoading(true);
     setPageError("");
 
@@ -80,7 +71,16 @@ function Profile() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
+
+  useEffect(() => {
+    if (firebaseConfigError || !user) {
+      return;
+    }
+
+    const timer = window.setTimeout(loadProfile, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadProfile, user]);
 
   function handlePickPhoto() {
     fileInputRef.current?.click();

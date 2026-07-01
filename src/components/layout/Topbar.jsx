@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bell, Menu, UserCircle } from "lucide-react";
 import { Menu as HeadlessMenu } from "@headlessui/react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { getNotifications } from "../../services/notificationService";
 import { getAdminProfile } from "../../services/profileService";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
