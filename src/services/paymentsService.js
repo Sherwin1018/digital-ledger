@@ -37,6 +37,7 @@ function mapPaymentSnapshot(snapshot) {
     amount: Number(data.amount || 0),
     previousBalance: Number(data.previousBalance || 0),
     remainingBalance: Number(data.remainingBalance || 0),
+    paymentSource: data.paymentSource || "",
     remarks: data.remarks || "",
     date: data.date || null,
   };
@@ -94,6 +95,7 @@ async function addPayment(entry) {
       `${customerData.firstName || ""} ${customerData.lastName || ""}`.trim() ||
       entry.customerName ||
       "Unknown Customer";
+    const remarks = entry.remarks?.trim() || (remainingBalance <= 0 ? "Paid" : "Unpaid");
 
     transaction.set(paymentRef, {
       customerId: entry.customerId,
@@ -102,7 +104,8 @@ async function addPayment(entry) {
       amount,
       previousBalance,
       remainingBalance,
-      remarks: entry.remarks.trim(),
+      paymentSource: entry.paymentSource || "",
+      remarks,
       transactionId: formatTransactionId(paymentNumber, paymentRef.id),
       date: Timestamp.now(),
     });

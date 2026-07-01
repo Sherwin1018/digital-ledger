@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Coins,
   ReceiptText,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
@@ -12,6 +13,7 @@ import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
 import { getDebts } from "../../services/debtsService";
 import { getPayments } from "../../services/paymentsService";
+import { getTrustStatusClass, getTrustStatusLabel } from "../../utils/customerCulture";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
 function formatCurrency(value) {
@@ -222,6 +224,12 @@ function Dashboard() {
     const highestBalances = [...customers]
       .sort((left, right) => Number(right.currentBalance || 0) - Number(left.currentBalance || 0))
       .slice(0, 6);
+    const trustSummary = {
+      trusted: customers.filter((customer) => customer.trustStatus !== "monitor" && customer.trustStatus !== "paused").length,
+      monitor: customers.filter((customer) => customer.trustStatus === "monitor").length,
+      paused: customers.filter((customer) => customer.trustStatus === "paused").length,
+      familyAccounts: customers.filter((customer) => customer.accountType === "family").length,
+    };
 
     return {
       cards: [
@@ -255,6 +263,7 @@ function Dashboard() {
       recentTransactions,
       recentPayments,
       highestBalances,
+      trustSummary,
     };
   }, [customers, debts, payments]);
 
@@ -297,6 +306,45 @@ function Dashboard() {
               </div>
             </article>
           ))}
+        </section>
+
+        <section className="rounded-3xl bg-white p-6 shadow-md">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Tiwala Snapshot</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Community credit health based on customer trust profiles.
+              </p>
+            </div>
+            <ShieldCheck className="text-slate-300" size={24} />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { key: "trusted", value: analytics.trustSummary.trusted },
+              { key: "monitor", value: analytics.trustSummary.monitor },
+              { key: "paused", value: analytics.trustSummary.paused },
+            ].map((item) => (
+              <div key={item.key} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${getTrustStatusClass(
+                    item.key,
+                  )}`}
+                >
+                  {getTrustStatusLabel(item.key)}
+                </span>
+                <p className="mt-3 text-2xl font-bold text-slate-900">{item.value}</p>
+              </div>
+            ))}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-700">
+                Family Accounts
+              </span>
+              <p className="mt-3 text-2xl font-bold text-slate-900">
+                {analytics.trustSummary.familyAccounts}
+              </p>
+            </div>
+          </div>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-2">

@@ -17,6 +17,15 @@ import {
   normalizeContactNumber,
   updateCustomer,
 } from "../../services/customersService";
+import {
+  ACCOUNT_TYPES,
+  PAYMENT_SCHEDULES,
+  TRUST_STATUSES,
+  getAccountTypeLabel,
+  getPaymentScheduleLabel,
+  getTrustStatusClass,
+  getTrustStatusLabel,
+} from "../../utils/customerCulture";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import {
   PHILIPPINE_MOBILE_ERROR,
@@ -30,6 +39,11 @@ const emptyForm = {
   lastName: "",
   contactNumber: "",
   address: "",
+  accountType: "individual",
+  householdName: "",
+  paymentSchedule: "flexible",
+  trustStatus: "trusted",
+  communityNotes: "",
   currentBalance: "0",
 };
 
@@ -121,6 +135,9 @@ function Customers() {
         fullName.includes(term) ||
         customer.contactNumber.toLowerCase().includes(term) ||
         customer.address.toLowerCase().includes(term) ||
+        customer.householdName.toLowerCase().includes(term) ||
+        getTrustStatusLabel(customer.trustStatus).toLowerCase().includes(term) ||
+        getPaymentScheduleLabel(customer.paymentSchedule).toLowerCase().includes(term) ||
         customer.displayId.toLowerCase().includes(term) ||
         customer.id.toLowerCase().includes(term)
       );
@@ -209,6 +226,11 @@ function Customers() {
       lastName: customer.lastName,
       contactNumber: customer.contactNumber,
       address: customer.address,
+      accountType: customer.accountType || "individual",
+      householdName: customer.householdName || "",
+      paymentSchedule: customer.paymentSchedule || "flexible",
+      trustStatus: customer.trustStatus || "trusted",
+      communityNotes: customer.communityNotes || "",
       currentBalance: String(customer.currentBalance ?? 0),
     });
     setFormErrors({});
@@ -290,7 +312,7 @@ function Customers() {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by name, contact, address, or ID"
+              placeholder="Search by name, family, contact, payday, trust, or ID"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
             />
           </label>
@@ -347,8 +369,10 @@ function Customers() {
                 <tr className="text-left text-sm font-semibold text-slate-600">
                   <th className="px-6 py-4">Customer ID</th>
                   <th className="px-6 py-4">Name</th>
+                  <th className="px-6 py-4">Account</th>
                   <th className="px-6 py-4">Contact Number</th>
                   <th className="px-6 py-4">Address</th>
+                  <th className="px-6 py-4">Trust</th>
                   <th className="px-6 py-4">Created Date</th>
                   <th className="px-6 py-4">Current Balance</th>
                   <th className="px-6 py-4 text-right">Actions</th>
@@ -358,19 +382,19 @@ function Customers() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="7">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="9">
                       Loading customers...
                     </td>
                   </tr>
                 ) : fetchError ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-red-600" colSpan="7">
+                    <td className="px-6 py-12 text-center text-red-600" colSpan="9">
                       {fetchError}
                     </td>
                   </tr>
                 ) : filteredCustomers.length === 0 ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="7">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="9">
                       No customers found yet.
                     </td>
                   </tr>
@@ -383,8 +407,28 @@ function Customers() {
                       <td className="px-6 py-4 font-medium text-slate-900">
                         {customer.firstName} {customer.lastName}
                       </td>
+                      <td className="px-6 py-4">
+                        <p>{getAccountTypeLabel(customer.accountType)}</p>
+                        {customer.householdName && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            {customer.householdName}
+                          </p>
+                        )}
+                      </td>
                       <td className="px-6 py-4">{customer.contactNumber}</td>
                       <td className="px-6 py-4">{customer.address}</td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getTrustStatusClass(
+                            customer.trustStatus,
+                          )}`}
+                        >
+                          {getTrustStatusLabel(customer.trustStatus)}
+                        </span>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {getPaymentScheduleLabel(customer.paymentSchedule)}
+                        </p>
+                      </td>
                       <td className="px-6 py-4">{formatDate(customer.createdAt)}</td>
                       <td className="px-6 py-4 font-semibold text-slate-900">
                         {formatCurrency(customer.currentBalance)}
@@ -512,12 +556,52 @@ function Customers() {
                       {formatCurrency(selectedCustomer.currentBalance)}
                     </p>
                   </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Account Type
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-700">
+                      {getAccountTypeLabel(selectedCustomer.accountType)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Household / Family
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-700">
+                      {selectedCustomer.householdName || "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Tiwala Status
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-700">
+                      {getTrustStatusLabel(selectedCustomer.trustStatus)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Expected Payment Habit
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-700">
+                      {getPaymentScheduleLabel(selectedCustomer.paymentSchedule)}
+                    </p>
+                  </div>
                   <div className="rounded-2xl bg-slate-50 p-4 sm:col-span-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Address
                     </p>
                     <p className="mt-2 text-sm font-medium text-slate-700">
                       {selectedCustomer.address}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4 sm:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Community Notes
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-slate-700">
+                      {selectedCustomer.communityNotes || "-"}
                     </p>
                   </div>
                 </div>
@@ -589,10 +673,10 @@ function Customers() {
                       )}
                     </label>
 
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-slate-700">
-                      Current Balance
-                    </span>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-700">
+                        Current Balance
+                      </span>
                       <input
                         type="number"
                         min="0"
@@ -611,6 +695,90 @@ function Customers() {
                           {formErrors.currentBalance}
                         </p>
                       )}
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-700">
+                        Account Type
+                      </span>
+                      <select
+                        value={form.accountType}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            accountType: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400"
+                      >
+                        {ACCOUNT_TYPES.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-700">
+                        Household / Family Name
+                      </span>
+                      <input
+                        type="text"
+                        value={form.householdName}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            householdName: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Garcia Family"
+                        className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-700">
+                        Tiwala Status
+                      </span>
+                      <select
+                        value={form.trustStatus}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            trustStatus: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400"
+                      >
+                        {TRUST_STATUSES.map((status) => (
+                          <option key={status.value} value={status.value}>
+                            {status.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-700">
+                        Expected Payment Habit
+                      </span>
+                      <select
+                        value={form.paymentSchedule}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            paymentSchedule: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400"
+                      >
+                        {PAYMENT_SCHEDULES.map((schedule) => (
+                          <option key={schedule.value} value={schedule.value}>
+                            {schedule.label}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                   </div>
 
@@ -658,6 +826,24 @@ function Customers() {
                     {formErrors.address && (
                       <p className="mt-2 text-sm text-red-600">{formErrors.address}</p>
                     )}
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-700">
+                      Community Notes
+                    </span>
+                    <textarea
+                      value={form.communityNotes}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          communityNotes: event.target.value,
+                        }))
+                      }
+                      rows="3"
+                      placeholder="e.g. Bayaran sa sweldo, family member can buy under this account."
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
+                    />
                   </label>
 
                   {actionError && (
@@ -759,3 +945,4 @@ function Customers() {
 }
 
 export default Customers;
+

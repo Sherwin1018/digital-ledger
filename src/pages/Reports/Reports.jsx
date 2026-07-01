@@ -14,6 +14,7 @@ import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
 import { getDebts } from "../../services/debtsService";
 import { getPayments } from "../../services/paymentsService";
+import { getPaymentSourceLabel } from "../../utils/customerCulture";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
 const reportOptions = [
@@ -158,6 +159,7 @@ function Reports() {
         customerName: debt.customerName,
         amount: Number(debt.total || 0),
         balanceAfter: Number(debt.runningBalance || 0),
+        paymentSource: "-",
         date: debt.date,
         remarks: debt.remarks || debt.product || "-",
       })),
@@ -168,6 +170,7 @@ function Reports() {
         customerName: payment.customerName,
         amount: Number(payment.amount || 0),
         balanceAfter: Number(payment.remainingBalance || 0),
+        paymentSource: getPaymentSourceLabel(payment.paymentSource),
         date: payment.date,
         remarks: payment.remarks || "-",
       })),
@@ -194,6 +197,7 @@ function Reports() {
     item.customerName,
     formatCurrency(item.amount),
     formatCurrency(item.balanceAfter),
+    item.paymentSource,
     formatDate(item.date),
     item.remarks,
   ]);
@@ -210,6 +214,7 @@ function Reports() {
             <td>${escapeHtml(item.customerName)}</td>
             <td>${Number(item.amount || 0)}</td>
             <td>${Number(item.balanceAfter || 0)}</td>
+            <td>${escapeHtml(item.paymentSource)}</td>
             <td>${escapeHtml(formatDate(item.date))}</td>
             <td>${escapeHtml(item.remarks)}</td>
           </tr>
@@ -241,6 +246,7 @@ function Reports() {
                 <th>Customer</th>
                 <th>Amount</th>
                 <th>Balance After</th>
+                <th>Payment Source</th>
                 <th>Date</th>
                 <th>Remarks</th>
               </tr>
@@ -277,7 +283,16 @@ function Reports() {
 
     autoTable(document, {
       startY: 70,
-      head: [["Type", "Transaction ID", "Customer", "Amount", "Balance After", "Date", "Remarks"]],
+      head: [[
+        "Type",
+        "Transaction ID",
+        "Customer",
+        "Amount",
+        "Balance After",
+        "Payment Source",
+        "Date",
+        "Remarks",
+      ]],
       body: reportRows,
       styles: { fontSize: 8 },
       headStyles: { fillColor: [6, 182, 212] },
@@ -302,6 +317,7 @@ function Reports() {
             <td>${item.customerName}</td>
             <td>${formatCurrency(item.amount)}</td>
             <td>${formatCurrency(item.balanceAfter)}</td>
+            <td>${item.paymentSource}</td>
             <td>${formatDate(item.date)}</td>
             <td>${item.remarks}</td>
           </tr>
@@ -342,6 +358,7 @@ function Reports() {
                 <th>Customer</th>
                 <th>Amount</th>
                 <th>Balance After</th>
+                <th>Payment Source</th>
                 <th>Date</th>
                 <th>Remarks</th>
               </tr>
@@ -460,6 +477,7 @@ function Reports() {
                     <th className="px-4 py-3">Customer</th>
                     <th className="px-4 py-3">Amount</th>
                     <th className="px-4 py-3">Balance After</th>
+                    <th className="px-4 py-3">Payment Source</th>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Remarks</th>
                   </tr>
@@ -467,13 +485,13 @@ function Reports() {
                 <tbody className="divide-y divide-slate-100 bg-white text-sm">
                   {loading ? (
                     <tr>
-                      <td className="px-4 py-6 text-slate-500" colSpan="7">
+                      <td className="px-4 py-6 text-slate-500" colSpan="8">
                         Loading report transactions...
                       </td>
                     </tr>
                   ) : reportData.transactions.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-6 text-slate-500" colSpan="7">
+                      <td className="px-4 py-6 text-slate-500" colSpan="8">
                         No transactions found for this period.
                       </td>
                     </tr>
@@ -499,6 +517,7 @@ function Reports() {
                         </td>
                         <td className="px-4 py-3">{formatCurrency(item.amount)}</td>
                         <td className="px-4 py-3">{formatCurrency(item.balanceAfter)}</td>
+                        <td className="px-4 py-3">{item.paymentSource}</td>
                         <td className="px-4 py-3">{formatDate(item.date)}</td>
                         <td className="px-4 py-3">{item.remarks}</td>
                       </tr>

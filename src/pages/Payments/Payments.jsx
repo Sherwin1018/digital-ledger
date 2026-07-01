@@ -5,11 +5,19 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
 import { addPayment, getPayments } from "../../services/paymentsService";
+import {
+  PAYMENT_SOURCES,
+  getPaymentScheduleLabel,
+  getPaymentSourceLabel,
+  getTrustStatusClass,
+  getTrustStatusLabel,
+} from "../../utils/customerCulture";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
 const emptyForm = {
   customerId: "",
   amount: "",
+  paymentSource: "partial",
   remarks: "",
 };
 
@@ -80,6 +88,7 @@ function Payments() {
       return (
         payment.transactionId.toLowerCase().includes(term) ||
         payment.customerName.toLowerCase().includes(term) ||
+        getPaymentSourceLabel(payment.paymentSource).toLowerCase().includes(term) ||
         payment.remarks.toLowerCase().includes(term)
       );
     });
@@ -238,6 +247,7 @@ function Payments() {
                   <th className="px-6 py-4">Payment</th>
                   <th className="px-6 py-4">Previous Balance</th>
                   <th className="px-6 py-4">Remaining Balance</th>
+                  <th className="px-6 py-4">Payment Source</th>
                   <th className="px-6 py-4">Date</th>
                   <th className="px-6 py-4">Remarks</th>
                 </tr>
@@ -245,19 +255,19 @@ function Payments() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="7">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
                       Loading payments...
                     </td>
                   </tr>
                 ) : fetchError ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-red-600" colSpan="7">
+                    <td className="px-6 py-12 text-center text-red-600" colSpan="8">
                       {fetchError}
                     </td>
                   </tr>
                 ) : filteredPayments.length === 0 ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="7">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
                       No payment history yet.
                     </td>
                   </tr>
@@ -276,6 +286,9 @@ function Payments() {
                       <td className="px-6 py-4">{formatCurrency(payment.previousBalance)}</td>
                       <td className="px-6 py-4 font-semibold text-cyan-700">
                         {formatCurrency(payment.remainingBalance)}
+                      </td>
+                      <td className="px-6 py-4">
+                        {getPaymentSourceLabel(payment.paymentSource)}
                       </td>
                       <td className="px-6 py-4">{formatDate(payment.date)}</td>
                       <td className="px-6 py-4">{payment.remarks || "-"}</td>
@@ -386,6 +399,28 @@ function Payments() {
                       )}
                     </label>
 
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-700">
+                        Payment Source / Habit
+                      </span>
+                      <select
+                        value={form.paymentSource}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            paymentSource: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400"
+                      >
+                        {PAYMENT_SOURCES.map((source) => (
+                          <option key={source.value} value={source.value}>
+                            {source.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
                     <label className="block sm:col-span-2">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
                         Remarks
@@ -399,6 +434,7 @@ function Payments() {
                           }))
                         }
                         rows="3"
+                        placeholder="e.g. Partial payment from sweldo."
                         className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
                       />
                     </label>
@@ -434,18 +470,35 @@ function Payments() {
                         Rule Check
                       </p>
                       <p className="mt-2 text-sm font-semibold text-slate-900">
-                        Cannot pay more than current balance and cannot pay zero.
+                        Source: {getPaymentSourceLabel(form.paymentSource)}
                       </p>
                     </div>
                   </div>
 
                   {selectedCustomer && (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                      Payment will be applied to{" "}
-                      <span className="font-semibold text-slate-900">
-                        {selectedCustomer.firstName} {selectedCustomer.lastName}
-                      </span>
-                      , and the remaining balance will update automatically.
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        Payment will be applied to{" "}
+                        <span className="font-semibold text-slate-900">
+                          {selectedCustomer.firstName} {selectedCustomer.lastName}
+                        </span>
+                        , and the remaining balance will update automatically.
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getTrustStatusClass(
+                              selectedCustomer.trustStatus,
+                            )}`}
+                          >
+                            {getTrustStatusLabel(selectedCustomer.trustStatus)}
+                          </span>
+                          <span>
+                            Expected payment habit:{" "}
+                            {getPaymentScheduleLabel(selectedCustomer.paymentSchedule)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   )}
 
