@@ -11,6 +11,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "../firebase/firebase";
+import { normalizePhilippineMobileNumber } from "../utils/philippineMobileNumber";
 import { formatNumericId, getNextDisplayNumber } from "./idService";
 
 const CUSTOMERS_COLLECTION = "customers";
@@ -28,7 +29,7 @@ function normalizeName(value) {
 }
 
 function normalizeContactNumber(value) {
-  return value.replace(/[^\d+]/g, "");
+  return normalizePhilippineMobileNumber(value);
 }
 
 function mapCustomerSnapshot(snapshot) {

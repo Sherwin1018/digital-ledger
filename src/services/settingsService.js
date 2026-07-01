@@ -9,6 +9,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "../firebase/firebase";
+import { normalizePhilippineMobileNumber } from "../utils/philippineMobileNumber";
 
 const SETTINGS_COLLECTION = "settings";
 const STORE_PROFILE_DOCUMENT = "storeProfile";
@@ -24,7 +25,7 @@ function ensureFirestore() {
 }
 
 function normalizeContactNumber(value) {
-  return value.replace(/[^\d+]/g, "");
+  return normalizePhilippineMobileNumber(value);
 }
 
 function serializeValue(value) {

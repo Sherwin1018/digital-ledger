@@ -82,15 +82,6 @@ function Sidebar({
           >
             <Menu size={24} />
           </button>
-        ) : !isDesktop ? (
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            className="rounded-lg p-2 transition hover:bg-slate-800"
-            aria-label="Close sidebar"
-          >
-            <Menu size={24} />
-          </button>
         ) : null}
       </div>
 
@@ -99,6 +90,7 @@ function Sidebar({
           <NavLink
             key={item.to}
             to={item.to}
+            onClick={!isDesktop ? onCloseMobile : undefined}
             className={({ isActive }) =>
               `flex items-center ${
                 isCompact ? "justify-center" : "gap-3"

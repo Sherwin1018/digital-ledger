@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { PackagePlus, Plus, ReceiptText, Search, X } from "lucide-react";
+import CustomerCombobox from "../../components/forms/CustomerCombobox";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
@@ -337,26 +338,17 @@ function Debts() {
                       <span className="mb-2 block text-sm font-medium text-slate-700">
                         Customer
                       </span>
-                      <select
-                        value={form.customerId}
-                        onChange={(event) =>
+                      <CustomerCombobox
+                        customers={customers}
+                        selectedCustomerId={form.customerId}
+                        onSelect={(customerId) =>
                           setForm((current) => ({
                             ...current,
-                            customerId: event.target.value,
+                            customerId,
                           }))
                         }
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400"
-                      >
-                        <option value="">Select a customer</option>
-                        {customers.map((customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.displayId} - {customer.firstName} {customer.lastName}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.customerId && (
-                        <p className="mt-2 text-sm text-red-600">{formErrors.customerId}</p>
-                      )}
+                        error={formErrors.customerId}
+                      />
                     </label>
 
                     <label className="block">

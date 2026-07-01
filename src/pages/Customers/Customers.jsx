@@ -18,6 +18,12 @@ import {
   updateCustomer,
 } from "../../services/customersService";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
+import {
+  PHILIPPINE_MOBILE_ERROR,
+  PHILIPPINE_MOBILE_PLACEHOLDER,
+  isValidPhilippineMobileNumber,
+  sanitizePhilippineMobileInput,
+} from "../../utils/philippineMobileNumber";
 
 const emptyForm = {
   firstName: "",
@@ -67,8 +73,8 @@ function validateCustomerForm(form) {
 
   if (!normalizedContact) {
     errors.contactNumber = "Contact number is required.";
-  } else if (!/^\+?\d{10,15}$/.test(normalizedContact)) {
-    errors.contactNumber = "Contact number must be 10 to 15 digits.";
+  } else if (!isValidPhilippineMobileNumber(normalizedContact)) {
+    errors.contactNumber = PHILIPPINE_MOBILE_ERROR;
   }
 
   if (!form.address.trim()) {
@@ -568,10 +574,12 @@ function Customers() {
                         onChange={(event) =>
                           setForm((current) => ({
                             ...current,
-                            contactNumber: event.target.value,
+                            contactNumber: sanitizePhilippineMobileInput(event.target.value),
                           }))
                         }
-                        placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                        inputMode="tel"
+                        maxLength="13"
+                        placeholder={PHILIPPINE_MOBILE_PLACEHOLDER}
                         className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
                       />
                       {formErrors.contactNumber && (
