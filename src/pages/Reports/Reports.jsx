@@ -531,7 +531,7 @@ function Reports() {
             <h2 className="text-xl font-bold text-slate-900">Report Transactions</h2>
             <p className="mt-1 text-sm text-slate-500">Range: {rangeLabel}</p>
 
-            <div className="mt-5 space-y-3 md:hidden">
+            <div className="mt-5 space-y-3 lg:hidden">
               {loading ? (
                 <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
                   Loading report transactions...
@@ -599,7 +599,7 @@ function Reports() {
               )}
             </div>
 
-            <div className="mt-5 hidden overflow-x-auto md:block">
+            <div className="mt-5 hidden overflow-x-auto lg:block">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-sm font-semibold text-slate-600">

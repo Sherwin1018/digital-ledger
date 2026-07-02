@@ -749,10 +749,10 @@ function Debts() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-4">
-          <div className="flex min-h-full items-center justify-center">
-            <div className="my-6 flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
+          <div className="flex min-h-full items-start justify-center sm:items-center">
+            <div className="my-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:my-6 sm:max-h-[calc(100vh-3rem)]">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:items-center sm:px-6 sm:py-5">
                 <div className="flex items-center gap-3">
                   <div className="rounded-2xl bg-cyan-100 p-3 text-cyan-700">
                     <PackagePlus size={20} />
@@ -778,7 +778,7 @@ function Debts() {
               </div>
 
               <div className="overflow-y-auto">
-                <form className="space-y-5 p-6" onSubmit={handleSubmit}>
+                <form className="space-y-5 p-5 pb-28 sm:p-6 sm:pb-6" onSubmit={handleSubmit}>
                   <div className="grid gap-5 sm:grid-cols-2">
                     <label className="block sm:col-span-2">
                       <FieldLabel required>Customer</FieldLabel>
@@ -1026,13 +1026,21 @@ function Debts() {
                     </div>
                   )}
 
-                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <div className="sticky bottom-0 -mx-5 -mb-28 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white/95 p-5 shadow-[0_-12px_24px_rgba(15,23,42,0.08)] backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:flex-row sm:justify-end sm:border-t-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-0">
                     <button
                       type="button"
                       onClick={closeModal}
                       className="rounded-2xl border border-slate-200 px-5 py-3 font-medium text-slate-600 transition hover:bg-slate-50"
                     >
                       Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addItemRow}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-200 px-5 py-3 font-semibold text-cyan-700 transition hover:bg-cyan-50 sm:hidden"
+                    >
+                      <Plus size={18} />
+                      Add Another Item
                     </button>
                     <button
                       type="submit"
@@ -1051,19 +1059,19 @@ function Debts() {
       )}
 
       {selectedDebt && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-4">
-          <div className="flex min-h-full items-center justify-center">
-            <div className="my-6 flex max-h-[calc(100vh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-cyan-100 p-3 text-cyan-700">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
+          <div className="flex min-h-full items-start justify-center sm:items-center">
+            <div className="my-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:my-6 sm:max-h-[calc(100vh-3rem)]">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:items-center sm:px-6 sm:py-5">
+                <div className="flex min-w-0 items-start gap-3 sm:items-center">
+                  <div className="shrink-0 rounded-2xl bg-cyan-100 p-3 text-cyan-700">
                     <ReceiptText size={20} />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-slate-900">
                       View Borrowed Goods
                     </h3>
-                    <p className="text-sm text-slate-500">
+                    <p className="break-words text-sm text-slate-500">
                       Full item list for {selectedDebt.transactionId}.
                       {selectedDebt.transactionIds?.length > 1
                         ? ` Includes ${selectedDebt.transactionIds.join(", ")}.`
@@ -1082,7 +1090,7 @@ function Debts() {
                 </button>
               </div>
 
-              <div className="space-y-5 overflow-y-auto p-6">
+              <div className="space-y-5 overflow-y-auto p-5 sm:p-6">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -1142,7 +1150,8 @@ function Debts() {
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200">
+                  <div className="overflow-x-auto">
+                  <table className="min-w-[38rem] divide-y divide-slate-200">
                     <thead className="bg-slate-50">
                       <tr className="text-left text-sm font-semibold text-slate-600">
                         <th className="px-4 py-3">Goods / Item</th>
@@ -1166,6 +1175,7 @@ function Debts() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
@@ -1180,7 +1190,8 @@ function Debts() {
                       Records are append-only and never overwritten.
                     </p>
                   </div>
-                  <table className="min-w-full divide-y divide-slate-200">
+                  <div className="overflow-x-auto">
+                  <table className="min-w-[38rem] divide-y divide-slate-200">
                     <thead className="bg-white">
                       <tr className="text-left text-sm font-semibold text-slate-600">
                         <th className="px-4 py-3">Receipt No.</th>
@@ -1214,6 +1225,7 @@ function Debts() {
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

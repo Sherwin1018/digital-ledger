@@ -78,8 +78,8 @@ function Sidebar({
           <button
             type="button"
             onClick={isDesktop ? onToggleDesktop : undefined}
-            className={`flex items-center gap-3 ${
-              isDesktop ? "cursor-pointer" : "cursor-default"
+            className={`flex items-center gap-3 rounded-xl p-2 -m-2 transition ${
+              isDesktop ? "cursor-pointer hover:bg-slate-800 active:scale-95" : "cursor-default"
             }`}
             aria-label={isDesktop ? "Collapse sidebar" : undefined}
           >

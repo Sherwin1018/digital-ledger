@@ -17,6 +17,8 @@ import { getTrustStatusClass, getTrustStatusLabel } from "../../utils/customerCu
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
+const DASHBOARD_LIST_LIMIT = 3;
+
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
     style: "currency",
@@ -220,12 +222,12 @@ function Dashboard() {
         const rightDate = getJsDate(right.date)?.getTime() || 0;
         return rightDate - leftDate;
       })
-      .slice(0, 6);
+      .slice(0, DASHBOARD_LIST_LIMIT);
 
-    const recentPayments = [...payments].slice(0, 6);
+    const recentPayments = [...payments].slice(0, DASHBOARD_LIST_LIMIT);
     const highestBalances = [...customers]
       .sort((left, right) => Number(right.currentBalance || 0) - Number(left.currentBalance || 0))
-      .slice(0, 6);
+      .slice(0, DASHBOARD_LIST_LIMIT);
     const trustSummary = {
       trusted: customers.filter((customer) => customer.trustStatus !== "monitor" && customer.trustStatus !== "paused").length,
       monitor: customers.filter((customer) => customer.trustStatus === "monitor").length,
@@ -430,7 +432,7 @@ function Dashboard() {
                 analytics.recentTransactions.map((item) => (
                   <div
                     key={`${item.type}-${item.id}`}
-                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:border-cyan-100 hover:bg-white hover:shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -474,7 +476,7 @@ function Dashboard() {
                 analytics.recentPayments.map((payment) => (
                   <div
                     key={payment.id}
-                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:border-emerald-100 hover:bg-white hover:shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -551,7 +553,7 @@ function Dashboard() {
                 analytics.highestBalances.map((customer, index) => (
                   <div
                     key={customer.id}
-                    className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4"
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 transition hover:border-amber-100 hover:bg-white hover:shadow-sm"
                   >
                     <div>
                       <p className="font-semibold text-slate-900">

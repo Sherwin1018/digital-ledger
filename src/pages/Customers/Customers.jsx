@@ -644,12 +644,12 @@ function Customers() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-4">
-          <div className="flex min-h-full items-center justify-center">
-            <div className="my-6 flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-cyan-100 p-3 text-cyan-700">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
+          <div className="flex min-h-full items-start justify-center sm:items-center">
+            <div className="my-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:my-6 sm:max-h-[calc(100vh-3rem)]">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:items-center sm:px-6 sm:py-5">
+              <div className="flex min-w-0 items-start gap-3 sm:items-center">
+                <div className="shrink-0 rounded-2xl bg-cyan-100 p-3 text-cyan-700">
                   <UserRound size={20} />
                 </div>
                 <div>
@@ -660,7 +660,7 @@ function Customers() {
                         ? "Edit Customer"
                         : "View Customer"}
                   </h3>
-                  <p className="text-sm text-slate-500">
+                  <p className="break-words text-sm text-slate-500">
                     {modalMode === "view"
                       ? "Review customer information."
                       : "All required fields must be completed."}
@@ -680,7 +680,7 @@ function Customers() {
 
             <div className="overflow-y-auto">
               {modalMode === "view" && selectedCustomer ? (
-                <div className="grid gap-4 p-6 sm:grid-cols-2">
+                <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Customer ID
@@ -813,7 +813,8 @@ function Customers() {
                     <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <h4 className="font-semibold text-slate-900">Recent Transactions</h4>
                     </div>
-                    <table className="min-w-full divide-y divide-slate-200">
+                    <div className="overflow-x-auto">
+                    <table className="min-w-[42rem] divide-y divide-slate-200">
                       <thead className="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3">Transaction ID</th>
@@ -849,12 +850,14 @@ function Customers() {
                         )}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                   <div className="overflow-hidden rounded-2xl border border-slate-200 sm:col-span-2">
                     <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <h4 className="font-semibold text-slate-900">Recent Payments</h4>
                     </div>
-                    <table className="min-w-full divide-y divide-slate-200">
+                    <div className="overflow-x-auto">
+                    <table className="min-w-[42rem] divide-y divide-slate-200">
                       <thead className="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3">Receipt No.</th>
@@ -892,6 +895,7 @@ function Customers() {
                         )}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 </div>
               ) : (

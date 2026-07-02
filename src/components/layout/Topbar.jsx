@@ -145,7 +145,7 @@ function Topbar({ showMenuButton, onMenuClick }) {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between bg-white px-6 py-4 shadow">
+    <header className="sticky top-0 z-20 flex items-center justify-between bg-white px-4 py-4 shadow sm:px-6">
       <div className="flex items-center">
         {showMenuButton && (
           <button
@@ -161,20 +161,21 @@ function Topbar({ showMenuButton, onMenuClick }) {
         <h1 className="text-2xl font-bold text-slate-700">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <HeadlessMenu as="div" className="relative">
           <HeadlessMenu.Button
             type="button"
             onClick={markNotificationsAsRead}
-            className="relative rounded-full p-2 transition hover:bg-slate-100"
+            className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-sm ring-2 ring-white transition hover:border-cyan-300 hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            aria-label={`${unreadCount} unread notifications`}
           >
-            <Bell className="text-slate-700" />
-            <span className="absolute -right-1 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">
+            <Bell size={24} strokeWidth={2.4} className="text-slate-900" />
+            <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-xs font-bold leading-none text-white shadow-md">
               {unreadCount}
             </span>
           </HeadlessMenu.Button>
 
-          <HeadlessMenu.Items className="absolute right-0 z-50 mt-3 w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl focus:outline-none">
+          <HeadlessMenu.Items className="absolute right-0 z-50 mt-3 w-[calc(100vw-2rem)] max-w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl focus:outline-none">
             <div className="border-b border-slate-100 px-5 py-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -264,7 +265,7 @@ function Topbar({ showMenuButton, onMenuClick }) {
                 <button
                   type="button"
                   onClick={handleOpenProfile}
-                  className={`w-full rounded-2xl px-4 py-3 text-left text-sm ${
+                  className={`w-full rounded-2xl px-4 py-3 text-left text-sm transition hover:bg-slate-100 ${
                     active ? "bg-slate-100" : ""
                   }`}
                 >
@@ -278,7 +279,7 @@ function Topbar({ showMenuButton, onMenuClick }) {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className={`w-full rounded-2xl px-4 py-3 text-left text-sm text-red-500 ${
+                  className={`w-full rounded-2xl px-4 py-3 text-left text-sm text-red-500 transition hover:bg-red-50 ${
                     active ? "bg-slate-100" : ""
                   }`}
                 >
