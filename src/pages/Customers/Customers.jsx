@@ -14,7 +14,7 @@ import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import {
   addCustomer,
-  deleteCustomer,
+  deactivateCustomer,
   getCustomers,
   normalizeContactNumber,
   updateCustomer,
@@ -91,7 +91,7 @@ function getJsDate(timestamp) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function validateCustomerForm(form) {
+function validateCustomerForm(form, mode = "add") {
   const errors = {};
   const normalizedContact = normalizeContactNumber(form.contactNumber);
 
@@ -113,12 +113,14 @@ function validateCustomerForm(form) {
     errors.address = "Address is required.";
   }
 
-  if (form.currentBalance === "") {
-    errors.currentBalance = "Current balance is required.";
-  } else if (Number.isNaN(Number(form.currentBalance))) {
-    errors.currentBalance = "Current balance must be a valid number.";
-  } else if (Number(form.currentBalance) < 0) {
-    errors.currentBalance = "Current balance cannot be negative.";
+  if (mode === "add") {
+    if (form.currentBalance === "") {
+      errors.currentBalance = "Starting balance is required.";
+    } else if (Number.isNaN(Number(form.currentBalance))) {
+      errors.currentBalance = "Starting balance must be a valid number.";
+    } else if (Number(form.currentBalance) < 0) {
+      errors.currentBalance = "Starting balance cannot be negative.";
+    }
   }
 
   return errors;
@@ -322,7 +324,7 @@ function Customers() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    const validationErrors = validateCustomerForm(form);
+    const validationErrors = validateCustomerForm(form, modalMode);
     setFormErrors(validationErrors);
     setActionError("");
 
@@ -367,12 +369,12 @@ function Customers() {
     setActionError("");
 
     try {
-      await deleteCustomer(customerPendingDelete.id);
+      await deactivateCustomer(customerPendingDelete.id, "Deactivated by admin");
       await loadCustomers();
-      showToast({ type: "success", message: "Customer deleted successfully." });
+      showToast({ type: "success", message: "Customer deactivated successfully." });
       closeDeleteModal();
     } catch (error) {
-      const message = getFirebaseErrorMessage(error, "Unable to delete customer.");
+      const message = getFirebaseErrorMessage(error, "Unable to deactivate customer.");
       setActionError(message);
       showToast({ type: "error", message });
       setDeleting(false);
@@ -527,7 +529,7 @@ function Customers() {
                     className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-red-300 hover:text-red-600"
                   >
                     <Trash2 size={14} />
-                    Delete
+                    Deactivate
                   </button>
                 </div>
               </article>
@@ -628,7 +630,7 @@ function Customers() {
                             type="button"
                             onClick={() => openDeleteModal(customer)}
                             className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-red-300 hover:text-red-600"
-                            aria-label="Delete customer"
+                            aria-label="Deactivate customer"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -960,27 +962,41 @@ function Customers() {
                       )}
                     </label>
 
-                    <label className="block">
-                      <FieldLabel required>Current Balance</FieldLabel>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.currentBalance}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            currentBalance: event.target.value,
-                          }))
-                        }
-                        className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
-                      />
-                      {formErrors.currentBalance && (
-                        <p className="mt-2 text-sm text-red-600">
-                          {formErrors.currentBalance}
+                    {modalMode === "add" ? (
+                      <label className="block">
+                        <FieldLabel required>Starting Utang Balance</FieldLabel>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.currentBalance}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              currentBalance: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
+                        />
+                        {formErrors.currentBalance && (
+                          <p className="mt-2 text-sm text-red-600">
+                            {formErrors.currentBalance}
+                          </p>
+                        )}
+                      </label>
+                    ) : (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Natitirang Utang
                         </p>
-                      )}
-                    </label>
+                        <p className="mt-2 font-semibold text-slate-900">
+                          {formatCurrency(selectedCustomer?.currentBalance || 0)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Balance is protected. Use utang, payment, or void entries to change it.
+                        </p>
+                      </div>
+                    )}
 
                     <label className="block">
                       <FieldLabel>Account Type</FieldLabel>
@@ -1159,9 +1175,9 @@ function Customers() {
             <div className="my-6 flex w-full max-w-md flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900">Delete Customer</h3>
+                  <h3 className="text-xl font-bold text-slate-900">Deactivate Customer</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    This action removes the selected customer record.
+                    This hides the customer but keeps ledger history intact.
                   </p>
                 </div>
 
@@ -1177,11 +1193,11 @@ function Customers() {
 
               <div className="space-y-5 p-6">
                 <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-sm text-red-700">
-                  Are you sure you want to delete{" "}
+                  Deactivate{" "}
                   <span className="font-semibold">
                     {customerPendingDelete.firstName} {customerPendingDelete.lastName}
                   </span>
-                  ?
+                  ? Existing utang and payments stay preserved.
                 </div>
 
                 {actionError && (
@@ -1205,7 +1221,7 @@ function Customers() {
                     disabled={deleting}
                     className="rounded-2xl bg-red-500 px-5 py-3 font-semibold text-white transition duration-1000 hover:bg-red-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {deleting ? "Deleting..." : "Delete Customer"}
+                    {deleting ? "Deactivating..." : "Deactivate Customer"}
                   </button>
                 </div>
               </div>

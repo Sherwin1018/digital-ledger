@@ -122,6 +122,7 @@ function Settings() {
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [restorePayload, setRestorePayload] = useState(null);
   const [restoreFileName, setRestoreFileName] = useState("");
+  const [restoreConfirmText, setRestoreConfirmText] = useState("");
 
   async function loadSettings() {
     setLoading(true);
@@ -238,6 +239,7 @@ function Settings() {
     setRestoreModalOpen(false);
     setRestorePayload(null);
     setRestoreFileName("");
+    setRestoreConfirmText("");
   }
 
   async function handleRestoreFileChange(event) {
@@ -264,6 +266,11 @@ function Settings() {
 
   async function handleRestoreConfirm() {
     if (!restorePayload) {
+      return;
+    }
+
+    if (restoreConfirmText !== "RESTORE") {
+      setPageError("Type RESTORE to confirm replacing the current ledger data.");
       return;
     }
 
@@ -508,6 +515,24 @@ function Settings() {
         </section>
 
         <section className="grid gap-6 xl:grid-cols-2">
+          <article className="rounded-3xl bg-white p-6 shadow-md">
+            <h3 className="text-xl font-bold text-slate-900">Roles / Access</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              Recommended setup: owner account handles restore, backup, and voiding.
+              Helpers/cashiers should only add utang and bayad when role-based access is added.
+            </p>
+          </article>
+
+          <article className="rounded-3xl bg-white p-6 shadow-md">
+            <h3 className="text-xl font-bold text-slate-900">Offline Reminder</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              This version needs internet to save safely. If connection is weak, wait
+              for the success message before trusting the transaction.
+            </p>
+          </article>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-2">
           <article className="flex h-full flex-col rounded-3xl bg-white p-6 shadow-md">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -639,6 +664,18 @@ function Settings() {
                   ID counters, and settings data.
                 </div>
 
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">
+                    Type RESTORE to confirm <span className="text-red-500">*</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={restoreConfirmText}
+                    onChange={(event) => setRestoreConfirmText(event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
+                  />
+                </label>
+
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                   <button
                     type="button"
@@ -651,7 +688,7 @@ function Settings() {
                   <button
                     type="button"
                     onClick={handleRestoreConfirm}
-                    disabled={restoring}
+                    disabled={restoring || restoreConfirmText !== "RESTORE"}
                     className="rounded-2xl bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {restoring ? "Restoring..." : "Restore Backup"}

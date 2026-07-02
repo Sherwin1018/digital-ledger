@@ -18,7 +18,7 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
-import { addDebt, getDebts } from "../../services/debtsService";
+import { addDebt, getDebts, voidDebt } from "../../services/debtsService";
 import { getPayments } from "../../services/paymentsService";
 import {
   COMMON_STORE_ITEMS,
@@ -302,6 +302,9 @@ function Debts() {
   const [submitting, setSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState(null);
+  const [debtPendingVoid, setDebtPendingVoid] = useState(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const { showToast } = useToast();
 
@@ -430,6 +433,13 @@ function Debts() {
     setSelectedDebt(null);
   }
 
+  function closeVoidModal() {
+    setDebtPendingVoid(null);
+    setVoidReason("");
+    setVoiding(false);
+    setActionError("");
+  }
+
   function updateItem(index, field, value) {
     setForm((current) => ({
       ...current,
@@ -484,6 +494,30 @@ function Debts() {
       setActionError(message);
       showToast({ type: "error", message });
       setSubmitting(false);
+    }
+  }
+
+  async function handleVoidConfirm() {
+    if (!debtPendingVoid) {
+      return;
+    }
+
+    setVoiding(true);
+    setActionError("");
+
+    try {
+      const debtIds = debtPendingVoid.debtIds || [debtPendingVoid.id];
+
+      await Promise.all(debtIds.map((debtId) => voidDebt(debtId, voidReason)));
+      await loadData();
+      showToast({ type: "success", message: "Utang voided and balance corrected." });
+      closeVoidModal();
+      closeViewModal();
+    } catch (error) {
+      const message = getFirebaseErrorMessage(error, "Unable to void utang.");
+      setActionError(message);
+      showToast({ type: "error", message });
+      setVoiding(false);
     }
   }
 
@@ -635,6 +669,13 @@ function Debts() {
                       <FileSpreadsheet size={14} />
                       Excel
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setDebtPendingVoid(debt)}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-200 hover:bg-amber-50"
+                    >
+                      Void
+                    </button>
                   </div>
                 </article>
               );
@@ -735,6 +776,13 @@ function Debts() {
                             >
                               <FileSpreadsheet size={14} />
                               Excel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDebtPendingVoid(debt)}
+                              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-200 hover:bg-amber-50"
+                            >
+                              Void
                             </button>
                           </div>
                         </td>
@@ -1255,6 +1303,83 @@ function Debts() {
                   >
                     <FileSpreadsheet size={18} />
                     Excel Proof
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDebtPendingVoid(selectedDebt)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300"
+                  >
+                    Void Utang
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {debtPendingVoid && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-4">
+          <div className="flex min-h-full items-center justify-center">
+            <div className="my-6 flex w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">Void Utang</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Use this for wrong customer, duplicate item, or wrong amount.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeVoidModal}
+                  className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Close void utang modal"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-5 p-6">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                  Void {debtPendingVoid.transactionId} for {debtPendingVoid.customerName}? This restores the customer's balance.
+                </div>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">
+                    Reason <span className="text-red-500">*</span>
+                  </span>
+                  <textarea
+                    value={voidReason}
+                    onChange={(event) => setVoidReason(event.target.value)}
+                    rows="3"
+                    placeholder="e.g. Wrong customer, duplicate utang, wrong item."
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
+                  />
+                </label>
+
+                {actionError && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {actionError}
+                  </div>
+                )}
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeVoidModal}
+                    disabled={voiding}
+                    className="rounded-2xl border border-slate-200 px-5 py-3 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleVoidConfirm}
+                    disabled={voiding}
+                    className="rounded-2xl bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {voiding ? "Voiding..." : "Void Utang"}
                   </button>
                 </div>
               </div>

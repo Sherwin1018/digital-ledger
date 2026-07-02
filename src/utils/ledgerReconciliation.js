@@ -28,10 +28,12 @@ function isLegacyCustomerPayment(payment) {
 }
 
 function reconcileLedger(debts, payments) {
-  const debtCopies = debts.map((debt) => ({
-    ...debt,
-    remainingBalance: roundCurrency(debt.remainingBalance ?? debt.total ?? 0),
-  }));
+  const debtCopies = debts
+    .filter((debt) => !debt.voided)
+    .map((debt) => ({
+      ...debt,
+      remainingBalance: roundCurrency(debt.remainingBalance ?? debt.total ?? 0),
+    }));
   const debtById = new Map(debtCopies.map((debt) => [debt.id, debt]));
   const debtsByCustomer = debtCopies.reduce((groups, debt) => {
     const nextGroups = groups;
@@ -48,8 +50,24 @@ function reconcileLedger(debts, payments) {
   });
 
   const paymentCopies = [...payments]
+    .filter((payment) => !payment.voided)
     .sort((left, right) => getTime(left.date) - getTime(right.date))
     .map((payment) => {
+      if (Array.isArray(payment.debtAllocations) && payment.debtAllocations.length > 0) {
+        return {
+          ...payment,
+          transactionId:
+            payment.transactionId ||
+            (payment.debtAllocations.length > 1
+              ? `${payment.debtAllocations[0].transactionId} +${payment.debtAllocations.length - 1}`
+              : payment.debtAllocations[0].transactionId),
+          debtTransactionId:
+            payment.debtTransactionId ||
+            payment.transactionId ||
+            payment.debtAllocations[0].transactionId,
+        };
+      }
+
       if (!isLegacyCustomerPayment(payment)) {
         const linkedDebt = debtById.get(payment.debtId);
 

@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDocs,
   orderBy,
@@ -47,9 +46,13 @@ function mapCustomerSnapshot(snapshot) {
     householdName: data.householdName || "",
     paymentSchedule: data.paymentSchedule || "flexible",
     trustStatus: data.trustStatus || "trusted",
+    active: data.active !== false,
+    deactivatedAt: data.deactivatedAt || null,
+    deactivationReason: data.deactivationReason || "",
     communityNotes: data.communityNotes || "",
     createdAt: data.createdAt || null,
     currentBalance: Number(data.currentBalance || 0),
+    advanceCredit: Number(data.advanceCredit || 0),
     totalBorrowings: Number(data.totalBorrowings || 0),
     totalPayments: Number(data.totalPayments || 0),
     transactionCount: Number(data.transactionCount || 0),
@@ -65,7 +68,7 @@ async function getCustomers() {
   );
   const snapshot = await getDocs(customersQuery);
 
-  return snapshot.docs.map(mapCustomerSnapshot);
+  return snapshot.docs.map(mapCustomerSnapshot).filter((customer) => customer.active);
 }
 
 async function checkDuplicateCustomer({ firstName, lastName, contactNumber, excludeId }) {
@@ -117,8 +120,10 @@ async function addCustomer(customer) {
       householdName: customer.householdName?.trim() || "",
       paymentSchedule: customer.paymentSchedule || "flexible",
       trustStatus: customer.trustStatus || "trusted",
+      active: true,
       communityNotes: customer.communityNotes?.trim() || "",
       currentBalance: Number(customer.currentBalance || 0),
+      advanceCredit: 0,
       totalBorrowings: Number(customer.currentBalance || 0),
       totalPayments: 0,
       transactionCount: 0,
@@ -151,20 +156,24 @@ async function updateCustomer(customerId, customer) {
     paymentSchedule: customer.paymentSchedule || "flexible",
     trustStatus: customer.trustStatus || "trusted",
     communityNotes: customer.communityNotes?.trim() || "",
-    currentBalance: Number(customer.currentBalance || 0),
     normalizedFirstName: normalizeName(customer.firstName),
     normalizedLastName: normalizeName(customer.lastName),
   });
 }
 
-async function deleteCustomer(customerId) {
+async function deactivateCustomer(customerId, reason = "Deactivated by admin") {
   ensureFirestore();
-  await deleteDoc(doc(db, CUSTOMERS_COLLECTION, customerId));
+
+  await updateDoc(doc(db, CUSTOMERS_COLLECTION, customerId), {
+    active: false,
+    deactivatedAt: serverTimestamp(),
+    deactivationReason: reason.trim() || "Deactivated by admin",
+  });
 }
 
 export {
   addCustomer,
-  deleteCustomer,
+  deactivateCustomer,
   getCustomers,
   normalizeContactNumber,
   updateCustomer,

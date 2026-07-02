@@ -7,7 +7,7 @@ import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
 import { getDebts } from "../../services/debtsService";
-import { addPayment, getPayments } from "../../services/paymentsService";
+import { addPayment, getPayments, voidPayment } from "../../services/paymentsService";
 import {
   PAYMENT_SOURCES,
   getPaymentScheduleLabel,
@@ -20,9 +20,9 @@ import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
 const emptyForm = {
   customerId: "",
-  debtId: "",
   amount: "",
   paymentSource: "partial",
+  overpaymentAction: "change",
   remarks: "",
 };
 
@@ -52,30 +52,39 @@ function formatDate(timestamp) {
   }).format(date);
 }
 
-function validatePaymentForm(form, selectedCustomer, selectedDebt) {
+function validatePaymentForm(form, selectedCustomer) {
   const errors = {};
   const amount = Number(form.amount);
-  const transactionBalance = Number(selectedDebt?.remainingBalance ?? 0);
+  const currentBalance = Number(selectedCustomer?.currentBalance || 0);
 
   if (!form.customerId) {
     errors.customerId = "Customer is required.";
   }
 
-  if (!form.debtId) {
-    errors.debtId = "Debt transaction is required.";
-  }
-
   if (!Number.isFinite(amount) || amount <= 0) {
     errors.amount = "Payment amount must be greater than zero.";
-  } else if (selectedDebt && amount > transactionBalance) {
-    errors.amount = "Payment cannot be greater than the selected transaction balance.";
+  } else if (selectedCustomer && currentBalance <= 0) {
+    errors.amount = "This customer has no unpaid utang.";
+  } else if (selectedCustomer && amount > currentBalance && form.overpaymentAction === "reject") {
+    errors.amount = "Payment is bigger than the utang. Choose sukli or advance credit.";
   }
 
   return errors;
 }
 
 function getPaymentStatus(payment) {
-  return Number(payment.remainingBalance || 0) <= 0 ? "PAID" : "UNPAID";
+  return Number(payment.remainingBalance || 0) <= 0 ? "CLEAR" : "UNPAID";
+}
+
+function getAllocationSummary(payment) {
+  if (!Array.isArray(payment.debtAllocations) || payment.debtAllocations.length === 0) {
+    return payment.transactionId || "-";
+  }
+
+  const firstAllocation = payment.debtAllocations[0];
+  return payment.debtAllocations.length > 1
+    ? `${firstAllocation.transactionId} +${payment.debtAllocations.length - 1} utang`
+    : firstAllocation.transactionId;
 }
 
 function getReceiptFilename(payment, extension) {
@@ -92,10 +101,10 @@ function downloadPaymentReceipt(payment) {
   document.setFontSize(11);
   document.text(`Receipt Number: ${payment.paymentId}`, 14, 32);
   document.text(`Customer: ${payment.customerName}`, 14, 40);
-  document.text(`Transaction ID: ${payment.transactionId}`, 14, 48);
+  document.text(`Applied To: ${payment.transactionId}`, 14, 48);
   document.text(`Payment Date: ${formatDate(payment.date)}`, 14, 56);
-  document.text(`Payment Amount: ${formatCurrency(payment.amount)}`, 14, 64);
-  document.text(`Remaining Balance: ${formatCurrency(payment.remainingBalance)}`, 14, 72);
+  document.text(`Halaga ng Bayad: ${formatCurrency(payment.amount)}`, 14, 64);
+  document.text(`Matitirang Utang: ${formatCurrency(payment.remainingBalance)}`, 14, 72);
   document.text(`Payment Status: ${getPaymentStatus(payment)}`, 14, 80);
 
   document.save(getReceiptFilename(payment, "pdf"));
@@ -123,10 +132,10 @@ function printPaymentReceipt(payment) {
         <h1>Digital Ledger Payment Receipt</h1>
         <p><strong>Receipt Number:</strong> ${payment.paymentId}</p>
         <p><strong>Customer:</strong> ${payment.customerName}</p>
-        <p><strong>Transaction ID:</strong> ${payment.transactionId}</p>
+        <p><strong>Applied To:</strong> ${payment.transactionId}</p>
         <p><strong>Payment Date:</strong> ${formatDate(payment.date)}</p>
-        <p><strong>Payment Amount:</strong> ${formatCurrency(payment.amount)}</p>
-        <p><strong>Remaining Balance:</strong> ${formatCurrency(payment.remainingBalance)}</p>
+        <p><strong>Halaga ng Bayad:</strong> ${formatCurrency(payment.amount)}</p>
+        <p><strong>Matitirang Utang:</strong> ${formatCurrency(payment.remainingBalance)}</p>
         <p><strong>Payment Status:</strong> ${getPaymentStatus(payment)}</p>
       </body>
     </html>
@@ -147,6 +156,9 @@ function Payments() {
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [paymentPendingVoid, setPaymentPendingVoid] = useState(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const { showToast } = useToast();
 
@@ -183,15 +195,11 @@ function Payments() {
     [debts, form.customerId],
   );
 
-  const selectedDebt = useMemo(
-    () => unpaidCustomerDebts.find((debt) => debt.id === form.debtId) || null,
-    [form.debtId, unpaidCustomerDebts],
-  );
-
   const currentBalance = Number(selectedCustomer?.currentBalance || 0);
   const paymentAmount = Number(form.amount || 0);
-  const selectedTransactionBalance = Number(selectedDebt?.remainingBalance ?? 0);
-  const projectedRemainingBalance = Math.max(selectedTransactionBalance - paymentAmount, 0);
+  const appliedPaymentAmount = Math.min(paymentAmount, currentBalance);
+  const overpaymentAmount = Math.max(paymentAmount - currentBalance, 0);
+  const projectedRemainingBalance = Math.max(currentBalance - appliedPaymentAmount, 0);
 
   async function loadData() {
     setLoading(true);
@@ -240,10 +248,17 @@ function Payments() {
     setSubmitting(false);
   }
 
+  function closeVoidModal() {
+    setPaymentPendingVoid(null);
+    setVoidReason("");
+    setVoiding(false);
+    setActionError("");
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
 
-    const validationErrors = validatePaymentForm(form, selectedCustomer, selectedDebt);
+    const validationErrors = validatePaymentForm(form, selectedCustomer);
     setFormErrors(validationErrors);
     setActionError("");
 
@@ -271,6 +286,27 @@ function Payments() {
     }
   }
 
+  async function handleVoidConfirm() {
+    if (!paymentPendingVoid) {
+      return;
+    }
+
+    setVoiding(true);
+    setActionError("");
+
+    try {
+      await voidPayment(paymentPendingVoid.id, voidReason);
+      await loadData();
+      showToast({ type: "success", message: "Payment voided and balance restored." });
+      closeVoidModal();
+    } catch (error) {
+      const message = getFirebaseErrorMessage(error, "Unable to void payment.");
+      setActionError(message);
+      showToast({ type: "error", message });
+      setVoiding(false);
+    }
+  }
+
   const totalCollected = filteredPayments.reduce(
     (sum, payment) => sum + Number(payment.amount || 0),
     0,
@@ -286,7 +322,7 @@ function Payments() {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by customer, remarks, or transaction"
+              placeholder="Search customer, bayad notes, or receipt"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
             />
           </label>
@@ -298,7 +334,7 @@ function Payments() {
             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Plus size={18} />
-            Add Payment
+            Magdagdag ng Bayad
           </button>
         </section>
 
@@ -317,19 +353,19 @@ function Payments() {
 
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-3xl bg-white p-5 shadow-md">
-            <p className="text-sm text-slate-500">Payment Entries</p>
+            <p className="text-sm text-slate-500">Mga Bayad</p>
             <p className="mt-3 text-3xl font-bold text-slate-900">
               {filteredPayments.length}
             </p>
           </div>
           <div className="rounded-3xl bg-white p-5 shadow-md">
-            <p className="text-sm text-slate-500">Total Collected</p>
+            <p className="text-sm text-slate-500">Nakolekta</p>
             <p className="mt-3 text-3xl font-bold text-slate-900">
               {formatCurrency(totalCollected)}
             </p>
           </div>
           <div className="rounded-3xl bg-white p-5 shadow-md">
-            <p className="text-sm text-slate-500">Customers Available</p>
+            <p className="text-sm text-slate-500">Customers</p>
             <p className="mt-3 text-3xl font-bold text-slate-900">{customers.length}</p>
           </div>
         </section>
@@ -358,8 +394,8 @@ function Payments() {
                     <h3 className="mt-2 text-lg font-bold text-slate-900">
                       {payment.customerName}
                     </h3>
-                    <p className="mt-1 font-mono text-xs text-slate-500">
-                      {payment.transactionId || "-"}
+                    <p className="mt-1 text-xs text-slate-500">
+                      Applied to: {getAllocationSummary(payment)}
                     </p>
                   </div>
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -369,19 +405,19 @@ function Payments() {
 
                 <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
                   <div>
-                    <p className="text-xs text-slate-500">Previous</p>
+                    <p className="text-xs text-slate-500">Dating Utang</p>
                     <p className="mt-1 font-semibold text-slate-900">
                       {formatCurrency(payment.previousBalance)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Remaining</p>
+                    <p className="text-xs text-slate-500">Natitirang Utang</p>
                     <p className="mt-1 font-bold text-cyan-700">
                       {formatCurrency(payment.remainingBalance)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Source</p>
+                    <p className="text-xs text-slate-500">Uri ng Bayad</p>
                     <p className="mt-1 font-medium text-slate-700">
                       {getPaymentSourceLabel(payment.paymentSource)}
                     </p>
@@ -395,8 +431,18 @@ function Payments() {
                 </div>
 
                 <p className="mt-3 text-sm text-slate-500">{payment.remarks || "-"}</p>
+                {Number(payment.changeDue || 0) > 0 && (
+                  <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+                    Sukli: {formatCurrency(payment.changeDue)}
+                  </p>
+                )}
+                {Number(payment.advanceCreditAmount || 0) > 0 && (
+                  <p className="mt-2 rounded-xl bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-700">
+                    Advance credit: {formatCurrency(payment.advanceCreditAmount)}
+                  </p>
+                )}
 
-                <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => downloadPaymentReceipt(payment)}
@@ -413,6 +459,13 @@ function Payments() {
                     <Printer size={14} />
                     Print
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentPendingVoid(payment)}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-200 hover:bg-amber-50"
+                  >
+                    Void
+                  </button>
                 </div>
               </article>
             ))
@@ -425,12 +478,12 @@ function Payments() {
               <thead className="bg-slate-50">
                 <tr className="text-left text-sm font-semibold text-slate-600">
                   <th className="px-6 py-4">Receipt No.</th>
-                  <th className="px-6 py-4">Debt Transaction</th>
+                  <th className="px-6 py-4">Applied To</th>
                   <th className="px-6 py-4">Customer</th>
                   <th className="px-6 py-4">Payment</th>
-                  <th className="px-6 py-4">Previous Balance</th>
-                  <th className="px-6 py-4">Remaining Balance</th>
-                  <th className="px-6 py-4">Payment Source</th>
+                  <th className="px-6 py-4">Dating Utang</th>
+                  <th className="px-6 py-4">Natitirang Utang</th>
+                  <th className="px-6 py-4">Uri ng Bayad</th>
                   <th className="px-6 py-4">Date</th>
                   <th className="px-6 py-4">Remarks</th>
                   <th className="px-6 py-4 text-right">Receipt</th>
@@ -462,7 +515,7 @@ function Payments() {
                         {payment.paymentId}
                       </td>
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                        {payment.transactionId || "-"}
+                        {getAllocationSummary(payment)}
                       </td>
                       <td className="px-6 py-4 font-medium text-slate-900">
                         {payment.customerName}
@@ -497,6 +550,13 @@ function Payments() {
                             <Printer size={14} />
                             Print
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentPendingVoid(payment)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-200 hover:bg-amber-50"
+                          >
+                            Void
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -518,10 +578,9 @@ function Payments() {
                     <HandCoins size={20} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900">Add Payment</h3>
+                    <h3 className="text-xl font-bold text-slate-900">Magdagdag ng Bayad</h3>
                     <p className="text-sm text-slate-500">
-                      Remaining balance updates automatically and payment history is
-                      preserved.
+                      Piliin ang customer, ilagay ang bayad, automatic ibabawas sa pinakalumang utang.
                     </p>
                   </div>
                 </div>
@@ -550,53 +609,22 @@ function Payments() {
                           setForm((current) => ({
                             ...current,
                             customerId,
-                            debtId: "",
                           }))
                         }
                         error={formErrors.customerId}
                       />
                     </label>
-
-                    <label className="block sm:col-span-2">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Debt Transaction <span className="text-red-500">*</span>
-                      </span>
-                      <select
-                        value={form.debtId}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            debtId: event.target.value,
-                          }))
-                        }
-                        disabled={!form.customerId}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                      >
-                        <option value="">
-                          {form.customerId
-                            ? "Select unpaid transaction"
-                            : "Select a customer first"}
-                        </option>
-                        {unpaidCustomerDebts.map((debt) => (
-                          <option key={debt.id} value={debt.id}>
-                            {debt.transactionId} • {formatDate(debt.date)} •{" "}
-                            {formatCurrency(debt.remainingBalance ?? debt.total)}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.debtId && (
-                        <p className="mt-2 text-sm text-red-600">{formErrors.debtId}</p>
-                      )}
-                      {form.customerId && unpaidCustomerDebts.length === 0 && (
-                        <p className="mt-2 text-sm text-amber-700">
-                          This customer has no unpaid debt transactions.
-                        </p>
-                      )}
-                    </label>
+                    {form.customerId && (
+                      <div className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-800 sm:col-span-2">
+                        {unpaidCustomerDebts.length > 0
+                          ? `May ${unpaidCustomerDebts.length} unpaid utang. Automatic ibabawas ang bayad sa pinakalumang utang muna.`
+                          : "Walang unpaid utang ang customer na ito."}
+                      </div>
+                    )}
 
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Customer Outstanding Balance <span className="text-slate-400">◌</span>
+                        Kabuuang Utang <span className="text-slate-400">◌</span>
                       </span>
                       <input
                         type="text"
@@ -624,11 +652,11 @@ function Payments() {
 
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Transaction Balance <span className="text-slate-400">◌</span>
+                        Ibabawas sa Utang <span className="text-slate-400">◌</span>
                       </span>
                       <input
                         type="text"
-                        value={formatCurrency(selectedTransactionBalance)}
+                        value={formatCurrency(appliedPaymentAmount)}
                         readOnly
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-500 outline-none"
                       />
@@ -636,7 +664,7 @@ function Payments() {
 
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Payment Amount <span className="text-red-500">*</span>
+                        Halaga ng Bayad <span className="text-red-500">*</span>
                       </span>
                       <input
                         type="number"
@@ -658,7 +686,7 @@ function Payments() {
 
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Payment Source / Habit <span className="text-slate-400">◌</span>
+                        Uri ng Bayad <span className="text-slate-400">◌</span>
                       </span>
                       <select
                         value={form.paymentSource}
@@ -677,6 +705,28 @@ function Payments() {
                         ))}
                       </select>
                     </label>
+
+                    {overpaymentAmount > 0 && (
+                      <label className="block sm:col-span-2">
+                        <span className="mb-2 block text-sm font-medium text-slate-700">
+                          Sobra ang bayad ng {formatCurrency(overpaymentAmount)}
+                        </span>
+                        <select
+                          value={form.overpaymentAction}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              overpaymentAction: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400"
+                        >
+                          <option value="change">Ibalik bilang sukli</option>
+                          <option value="advance">Itabi bilang advance credit</option>
+                          <option value="reject">Huwag tanggapin kung sobra</option>
+                        </select>
+                      </label>
+                    )}
 
                     <label className="block sm:col-span-2">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
@@ -708,7 +758,7 @@ function Payments() {
                     </div>
                     <div className="rounded-2xl bg-white p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        Remaining Balance
+                        Matitirang Utang
                       </p>
                       <p className="mt-2 text-2xl font-bold text-cyan-700">
                         {formatCurrency(projectedRemainingBalance)}
@@ -716,18 +766,18 @@ function Payments() {
                     </div>
                     <div className="rounded-2xl bg-white p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        Transaction ID
+                        Applied To
                       </p>
                       <p className="mt-2 font-mono text-sm text-slate-700">
-                        {selectedDebt?.transactionId || "Select transaction"}
+                        {unpaidCustomerDebts.length > 0 ? "Oldest unpaid utang first" : "No unpaid utang"}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-white p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        Rule Check
+                        Sobra / Sukli
                       </p>
                       <p className="mt-2 text-sm font-semibold text-slate-900">
-                        Source: {getPaymentSourceLabel(form.paymentSource)}
+                        {overpaymentAmount > 0 ? formatCurrency(overpaymentAmount) : "Walang sobra"}
                       </p>
                     </div>
                   </div>
@@ -739,7 +789,7 @@ function Payments() {
                         <span className="font-semibold text-slate-900">
                           {selectedCustomer.firstName} {selectedCustomer.lastName}
                         </span>
-                        , and the remaining balance will update automatically.
+                        , oldest unpaid utang first.
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
                         <div className="flex flex-wrap items-center gap-2">
@@ -783,6 +833,82 @@ function Payments() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paymentPendingVoid && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-4">
+          <div className="flex min-h-full items-center justify-center">
+            <div className="my-6 flex w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">Void Payment</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    This restores the utang balance and keeps an audit record.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeVoidModal}
+                  className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Close void payment modal"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-5 p-6">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                  Void receipt{" "}
+                  <span className="font-semibold">{paymentPendingVoid.paymentId}</span>{" "}
+                  for {paymentPendingVoid.customerName}? This will reverse{" "}
+                  <span className="font-semibold">
+                    {formatCurrency(paymentPendingVoid.appliedAmount ?? paymentPendingVoid.amount)}
+                  </span>
+                  .
+                </div>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">
+                    Reason <span className="text-red-500">*</span>
+                  </span>
+                  <textarea
+                    value={voidReason}
+                    onChange={(event) => setVoidReason(event.target.value)}
+                    rows="3"
+                    placeholder="e.g. Wrong customer, duplicate payment, wrong amount."
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
+                  />
+                </label>
+
+                {actionError && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {actionError}
+                  </div>
+                )}
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeVoidModal}
+                    disabled={voiding}
+                    className="rounded-2xl border border-slate-200 px-5 py-3 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleVoidConfirm}
+                    disabled={voiding}
+                    className="rounded-2xl bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {voiding ? "Voiding..." : "Void Payment"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

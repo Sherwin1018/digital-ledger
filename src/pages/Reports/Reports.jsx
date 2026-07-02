@@ -19,13 +19,13 @@ import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
 const reportOptions = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "outstanding", label: "Outstanding Balances" },
-  { value: "paid", label: "Paid Transactions" },
-  { value: "unpaid", label: "Unpaid Transactions" },
-  { value: "topCustomers", label: "Top Customer Balances" },
+  { value: "daily", label: "Kita / Nakolekta Ngayon" },
+  { value: "weekly", label: "Weekly Summary" },
+  { value: "monthly", label: "Monthly Summary" },
+  { value: "outstanding", label: "May Utang Pa" },
+  { value: "paid", label: "Bayad Na" },
+  { value: "unpaid", label: "Singilin" },
+  { value: "topCustomers", label: "Pinakamalaking Utang" },
 ];
 
 function formatCurrency(value) {

@@ -126,6 +126,7 @@ function groupArchivedDebts(debts) {
 function Archives() {
   const [customers, setCustomers] = useState([]);
   const [debts, setDebts] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
@@ -148,6 +149,7 @@ function Archives() {
 
       setCustomers(nextCustomers);
       setDebts(reconciledLedger.debts);
+      setPayments(reconciledLedger.payments);
     } catch (nextError) {
       setError(getFirebaseErrorMessage(nextError, "Failed to load archives."));
     } finally {
@@ -195,6 +197,16 @@ function Archives() {
     () => [...new Set(archivedGroups.map((debt) => getYearKey(debt.date)).filter(Boolean))],
     [archivedGroups],
   );
+
+  function getPaymentsForDebtGroup(debt) {
+    const debtIds = new Set(debt.debtIds || [debt.id]);
+
+    return payments.filter(
+      (payment) =>
+        debtIds.has(payment.debtId) ||
+        payment.debtAllocations?.some((allocation) => debtIds.has(allocation.debtId)),
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -339,6 +351,21 @@ function Archives() {
                     </p>
                   </div>
                 </div>
+                <div className="mt-4 rounded-2xl bg-emerald-50 p-3 text-sm">
+                  <p className="font-semibold text-emerald-800">How paid</p>
+                  {getPaymentsForDebtGroup(debt).length === 0 ? (
+                    <p className="mt-1 text-emerald-700">No linked payment receipt found.</p>
+                  ) : (
+                    <div className="mt-2 space-y-1 text-emerald-800">
+                      {getPaymentsForDebtGroup(debt).map((payment) => (
+                        <p key={`${debt.id}-${payment.id}`}>
+                          {payment.paymentId} - {formatCurrency(payment.amount)} on{" "}
+                          {formatDate(payment.date)}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </article>
             ))
           )}
@@ -355,19 +382,20 @@ function Archives() {
                   <th className="px-6 py-4">Total Items</th>
                   <th className="px-6 py-4">Grand Total</th>
                   <th className="px-6 py-4">Date</th>
+                  <th className="px-6 py-4">Payment Receipts</th>
                   <th className="px-6 py-4">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="7">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
                       Loading archives...
                     </td>
                   </tr>
                 ) : filteredArchives.length === 0 ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="7">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
                       No paid debts found.
                     </td>
                   </tr>
@@ -406,6 +434,19 @@ function Archives() {
                       <td className="px-6 py-4">
                         <CalendarDays size={14} className="mr-1 inline text-slate-400" />
                         {formatDate(debt.date)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {getPaymentsForDebtGroup(debt).length === 0 ? (
+                          "No linked receipt"
+                        ) : (
+                          <div className="space-y-1">
+                            {getPaymentsForDebtGroup(debt).map((payment) => (
+                              <p key={`${debt.id}-table-${payment.id}`}>
+                                {payment.paymentId} - {formatCurrency(payment.amount)}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">

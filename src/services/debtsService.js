@@ -91,6 +91,9 @@ function mapDebtSnapshot(snapshot) {
       data.status ||
       (Number(data.remainingBalance ?? data.total ?? 0) <= 0 ? STATUS_PAID : STATUS_UNPAID),
     remarks: data.remarks || "",
+    voided: Boolean(data.voided),
+    voidReason: data.voidReason || "",
+    voidedAt: data.voidedAt || null,
     date: data.date || null,
     createdAt: data.createdAt || data.date || null,
     updatedAt: data.updatedAt || data.date || null,
@@ -103,7 +106,7 @@ async function getDebts() {
   const debtsQuery = query(collection(db, DEBTS_COLLECTION), orderBy("date", "desc"));
   const snapshot = await getDocs(debtsQuery);
 
-  return snapshot.docs.map(mapDebtSnapshot);
+  return snapshot.docs.map(mapDebtSnapshot).filter((debt) => !debt.voided);
 }
 
 async function addDebt(entry) {
@@ -150,6 +153,15 @@ async function addDebt(entry) {
     }
 
     const customerData = customerSnapshot.data();
+
+    if (customerData.active === false) {
+      throw new Error("This customer is deactivated and cannot add new utang.");
+    }
+
+    if (customerData.trustStatus === "paused") {
+      throw new Error("Credit is paused for this customer. Ask owner approval before adding utang.");
+    }
+
     const currentBalance = Number(customerData.currentBalance || 0);
     const runningBalance = currentBalance + total;
     const debtNumber = await getNextDisplayNumber(transaction, "debts");
@@ -179,6 +191,7 @@ async function addDebt(entry) {
       grandTotal: total,
       remainingBalance: total,
       status: STATUS_UNPAID,
+      voided: false,
       remarks: entry.remarks?.trim() || "",
       transactionId,
       date: now,
@@ -205,6 +218,77 @@ async function addDebt(entry) {
   });
 }
 
+async function voidDebt(debtId, reason) {
+  ensureFirestore();
+
+  if (!debtId) {
+    throw new Error("Debt transaction is required.");
+  }
+
+  if (!reason?.trim()) {
+    throw new Error("Void reason is required.");
+  }
+
+  const debtRef = doc(db, DEBTS_COLLECTION, debtId);
+  const auditRef = doc(collection(db, AUDIT_COLLECTION));
+
+  await runTransaction(db, async (transaction) => {
+    const debtSnapshot = await transaction.get(debtRef);
+
+    if (!debtSnapshot.exists()) {
+      throw new Error("Debt transaction could not be found.");
+    }
+
+    const debtData = debtSnapshot.data();
+
+    if (debtData.voided) {
+      throw new Error("This debt transaction is already voided.");
+    }
+
+    const remainingBalance = Number(debtData.remainingBalance ?? debtData.total ?? 0);
+    const total = Number(debtData.total || 0);
+
+    if (remainingBalance < total) {
+      throw new Error("This utang already has payment history. Void the payment first before voiding the utang.");
+    }
+
+    const customerRef = doc(db, CUSTOMERS_COLLECTION, debtData.customerId);
+    const customerSnapshot = await transaction.get(customerRef);
+    const now = Timestamp.now();
+
+    if (customerSnapshot.exists()) {
+      const customerData = customerSnapshot.data();
+
+      transaction.update(customerRef, {
+        currentBalance: Math.max(Number(customerData.currentBalance || 0) - total, 0),
+        totalBorrowings: Math.max(Number(customerData.totalBorrowings || 0) - total, 0),
+        transactionCount: Math.max(Number(customerData.transactionCount || 0) - 1, 0),
+      });
+    }
+
+    transaction.update(debtRef, {
+      voided: true,
+      voidReason: reason.trim(),
+      voidedAt: now,
+      status: "VOIDED",
+      remainingBalance: 0,
+      updatedAt: now,
+    });
+
+    transaction.set(auditRef, {
+      action: "DEBT_VOIDED",
+      entityType: "debt",
+      entityId: debtId,
+      transactionId: debtData.transactionId || debtId,
+      customerId: debtData.customerId || "",
+      customerName: debtData.customerName || "",
+      amount: total,
+      reason: reason.trim(),
+      createdAt: now,
+    });
+  });
+}
+
 async function getCustomer(customerId) {
   ensureFirestore();
 
@@ -217,4 +301,4 @@ async function getCustomer(customerId) {
   return snapshot.data();
 }
 
-export { STATUS_PAID, STATUS_UNPAID, addDebt, getCustomer, getDebts };
+export { STATUS_PAID, STATUS_UNPAID, addDebt, getCustomer, getDebts, voidDebt };
