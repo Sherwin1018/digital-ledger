@@ -9,8 +9,11 @@ import {
   LogOut,
   Store,
   Menu,
+  Archive,
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
+import { useToast } from "../../context/useToast";
+import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
 function Sidebar({
   collapsed,
@@ -21,19 +24,31 @@ function Sidebar({
 }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { showToast } = useToast();
   const menuItems = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/customers", icon: Users, label: "Customers" },
     { to: "/debts", icon: Wallet, label: "Debts" },
     { to: "/payments", icon: CreditCard, label: "Payments" },
+    { to: "/archives", icon: Archive, label: "Archives" },
     { to: "/reports", icon: FileText, label: "Reports" },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
   const isCompact = isDesktop && collapsed;
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/", { replace: true });
+    try {
+      showToast({ type: "info", message: "Logging out..." });
+      await logout();
+      window.setTimeout(() => {
+        navigate("/", { replace: true, state: { logoutSuccess: true } });
+      }, 1000);
+    } catch (error) {
+      showToast({
+        type: "error",
+        message: getFirebaseErrorMessage(error, "Logout failed. Please try again."),
+      });
+    }
   };
 
   return (
@@ -114,7 +129,7 @@ function Sidebar({
           onClick={handleLogout}
           className={`w-full flex items-center ${
             isCompact ? "justify-center" : "gap-3"
-          } p-3 rounded-lg hover:bg-red-600 transition`}
+          } p-3 rounded-lg transition duration-1000 hover:bg-red-600 active:scale-95`}
         >
           <LogOut size={22} />
 

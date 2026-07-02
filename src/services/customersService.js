@@ -50,6 +50,9 @@ function mapCustomerSnapshot(snapshot) {
     communityNotes: data.communityNotes || "",
     createdAt: data.createdAt || null,
     currentBalance: Number(data.currentBalance || 0),
+    totalBorrowings: Number(data.totalBorrowings || 0),
+    totalPayments: Number(data.totalPayments || 0),
+    transactionCount: Number(data.transactionCount || 0),
   };
 }
 
@@ -116,6 +119,9 @@ async function addCustomer(customer) {
       trustStatus: customer.trustStatus || "trusted",
       communityNotes: customer.communityNotes?.trim() || "",
       currentBalance: Number(customer.currentBalance || 0),
+      totalBorrowings: Number(customer.currentBalance || 0),
+      totalPayments: 0,
+      transactionCount: 0,
       normalizedFirstName: normalizeName(customer.firstName),
       normalizedLastName: normalizeName(customer.lastName),
       createdAt: serverTimestamp(),

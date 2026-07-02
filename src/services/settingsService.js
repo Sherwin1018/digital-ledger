@@ -14,7 +14,7 @@ import { normalizePhilippineMobileNumber } from "../utils/philippineMobileNumber
 const SETTINGS_COLLECTION = "settings";
 const STORE_PROFILE_DOCUMENT = "storeProfile";
 const ADMIN_PROFILE_DOCUMENT = "adminProfile";
-const BACKUP_COLLECTIONS = ["customers", "debts", "payments", "systemCounters"];
+const BACKUP_COLLECTIONS = ["customers", "debts", "payments", "auditTrail", "systemCounters"];
 
 function ensureFirestore() {
   if (!db) {

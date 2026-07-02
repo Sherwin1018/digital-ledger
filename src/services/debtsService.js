@@ -13,6 +13,9 @@ import { formatNumericId, getNextDisplayNumber } from "./idService";
 
 const DEBTS_COLLECTION = "debts";
 const CUSTOMERS_COLLECTION = "customers";
+const AUDIT_COLLECTION = "auditTrail";
+const STATUS_PAID = "PAID";
+const STATUS_UNPAID = "UNPAID";
 
 function ensureFirestore() {
   if (!db) {
@@ -41,12 +44,13 @@ function normalizeDebtItems(entry) {
     const product = String(item.product || "").trim();
     const quantity = Number(item.quantity);
     const unitPrice = Number(item.unitPrice);
+    const total = Number((quantity * unitPrice).toFixed(2));
 
     return {
       product,
       quantity,
       unitPrice,
-      total: quantity * unitPrice,
+      total,
     };
   });
 }
@@ -80,9 +84,16 @@ function mapDebtSnapshot(snapshot) {
     quantity: Number(data.quantity || 0),
     unitPrice: Number(data.unitPrice || 0),
     total: Number(data.total || 0),
+    grandTotal: Number(data.grandTotal ?? data.total ?? 0),
     runningBalance: Number(data.runningBalance || 0),
+    remainingBalance: Number(data.remainingBalance ?? data.total ?? 0),
+    status:
+      data.status ||
+      (Number(data.remainingBalance ?? data.total ?? 0) <= 0 ? STATUS_PAID : STATUS_UNPAID),
     remarks: data.remarks || "",
     date: data.date || null,
+    createdAt: data.createdAt || data.date || null,
+    updatedAt: data.updatedAt || data.date || null,
   };
 }
 
@@ -99,7 +110,7 @@ async function addDebt(entry) {
   ensureFirestore();
 
   const items = normalizeDebtItems(entry);
-  const total = items.reduce((sum, item) => sum + item.total, 0);
+  const total = Number(items.reduce((sum, item) => sum + item.total, 0).toFixed(2));
 
   if (!entry.customerId) {
     throw new Error("Customer is required.");
@@ -129,6 +140,7 @@ async function addDebt(entry) {
 
   const debtRef = doc(collection(db, DEBTS_COLLECTION));
   const customerRef = doc(db, CUSTOMERS_COLLECTION, entry.customerId);
+  const auditRef = doc(collection(db, AUDIT_COLLECTION));
 
   await runTransaction(db, async (transaction) => {
     const customerSnapshot = await transaction.get(customerRef);
@@ -151,6 +163,9 @@ async function addDebt(entry) {
     const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
     const unitPrice = items.length === 1 ? items[0].unitPrice : 0;
 
+    const now = Timestamp.now();
+    const transactionId = formatTransactionId(debtNumber, debtRef.id);
+
     transaction.set(debtRef, {
       customerId: entry.customerId,
       debtNumber,
@@ -161,13 +176,31 @@ async function addDebt(entry) {
       unitPrice,
       total,
       runningBalance,
+      grandTotal: total,
+      remainingBalance: total,
+      status: STATUS_UNPAID,
       remarks: entry.remarks?.trim() || "",
-      transactionId: formatTransactionId(debtNumber, debtRef.id),
-      date: Timestamp.now(),
+      transactionId,
+      date: now,
+      createdAt: now,
+      updatedAt: now,
     });
 
     transaction.update(customerRef, {
       currentBalance: runningBalance,
+      totalBorrowings: Number(customerData.totalBorrowings || 0) + total,
+      transactionCount: Number(customerData.transactionCount || 0) + 1,
+    });
+
+    transaction.set(auditRef, {
+      action: "DEBT_CREATED",
+      entityType: "debt",
+      entityId: debtRef.id,
+      transactionId,
+      customerId: entry.customerId,
+      customerName,
+      amount: total,
+      createdAt: now,
     });
   });
 }
@@ -184,4 +217,4 @@ async function getCustomer(customerId) {
   return snapshot.data();
 }
 
-export { addDebt, getCustomer, getDebts };
+export { STATUS_PAID, STATUS_UNPAID, addDebt, getCustomer, getDebts };

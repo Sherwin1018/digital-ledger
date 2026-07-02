@@ -5,6 +5,7 @@ import Dashboard from "../pages/Dashboard/Dashboard";
 import Customers from "../pages/Customers/Customers";
 import Debts from "../pages/Debts/Debts";
 import Payments from "../pages/Payments/Payments";
+import Archives from "../pages/Archives/Archives";
 import Reports from "../pages/Reports/Reports";
 import Settings from "../pages/Settings/Settings";
 import Profile from "../pages/Profile/Profile";
@@ -53,6 +54,14 @@ function AppRoutes() {
                     element={
                         <ProtectedRoute>
                             <Payments />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/archives"
+                    element={
+                        <ProtectedRoute>
+                            <Archives />
                         </ProtectedRoute>
                     }
                 />

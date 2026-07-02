@@ -8,7 +8,9 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import FieldLabel from "../../components/forms/FieldLabel";
 import DashboardLayout from "../../components/layout/DashboardLayout";
+import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import {
   addCustomer,
@@ -17,6 +19,8 @@ import {
   normalizeContactNumber,
   updateCustomer,
 } from "../../services/customersService";
+import { getDebts } from "../../services/debtsService";
+import { getPayments } from "../../services/paymentsService";
 import {
   ACCOUNT_TYPES,
   PAYMENT_SCHEDULES,
@@ -33,6 +37,7 @@ import {
   isValidPhilippineMobileNumber,
   sanitizePhilippineMobileInput,
 } from "../../utils/philippineMobileNumber";
+import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
 const emptyForm = {
   firstName: "",
@@ -73,6 +78,19 @@ function formatDate(timestamp) {
   }).format(date);
 }
 
+function getJsDate(timestamp) {
+  if (!timestamp) {
+    return null;
+  }
+
+  if (typeof timestamp.toDate === "function") {
+    return timestamp.toDate();
+  }
+
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function validateCustomerForm(form) {
   const errors = {};
   const normalizedContact = normalizeContactNumber(form.contactNumber);
@@ -108,6 +126,8 @@ function validateCustomerForm(form) {
 
 function Customers() {
   const [customers, setCustomers] = useState([]);
+  const [debts, setDebts] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(!firebaseConfigError);
   const [fetchError, setFetchError] = useState("");
@@ -120,6 +140,7 @@ function Customers() {
   const [customerPendingDelete, setCustomerPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const { showToast } = useToast();
 
   const filteredCustomers = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -170,13 +191,65 @@ function Customers() {
     });
   }, [customers, form.contactNumber, form.firstName, form.lastName, modalMode]);
 
+  const selectedCustomerDebts = useMemo(() => {
+    if (!selectedCustomer) {
+      return [];
+    }
+
+    return debts
+      .filter((debt) => debt.customerId === selectedCustomer.id)
+      .sort((left, right) => (getJsDate(right.date)?.getTime() || 0) - (getJsDate(left.date)?.getTime() || 0));
+  }, [debts, selectedCustomer]);
+
+  const selectedCustomerPayments = useMemo(() => {
+    if (!selectedCustomer) {
+      return [];
+    }
+
+    return payments
+      .filter((payment) => payment.customerId === selectedCustomer.id)
+      .sort((left, right) => (getJsDate(right.date)?.getTime() || 0) - (getJsDate(left.date)?.getTime() || 0));
+  }, [payments, selectedCustomer]);
+
+  const selectedCustomerSummary = useMemo(() => {
+    const totalBorrowings = selectedCustomerDebts.reduce(
+      (sum, debt) => sum + Number(debt.total || 0),
+      0,
+    );
+    const totalPayments = selectedCustomerPayments.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0,
+    );
+    const outstandingBalance = selectedCustomerDebts.reduce(
+      (sum, debt) => sum + Number(debt.remainingBalance ?? debt.total ?? 0),
+      0,
+    );
+
+    return {
+      outstandingBalance,
+      totalBorrowings,
+      totalPayments,
+      transactionCount: selectedCustomerDebts.length,
+      recentTransactions: selectedCustomerDebts.slice(0, 5),
+      recentPayments: selectedCustomerPayments.slice(0, 5),
+    };
+  }, [selectedCustomerDebts, selectedCustomerPayments]);
+
   async function loadCustomers() {
     setLoading(true);
     setFetchError("");
 
     try {
-      const nextCustomers = await getCustomers();
+      const [nextCustomers, nextDebts, nextPayments] = await Promise.all([
+        getCustomers(),
+        getDebts(),
+        getPayments(),
+      ]);
+      const reconciledLedger = reconcileLedger(nextDebts, nextPayments);
+
       setCustomers(nextCustomers);
+      setDebts(reconciledLedger.debts);
+      setPayments(reconciledLedger.payments);
     } catch (error) {
       setFetchError(getFirebaseErrorMessage(error, "Failed to load customers."));
     } finally {
@@ -267,9 +340,15 @@ function Customers() {
       }
 
       await loadCustomers();
+      showToast({
+        type: "success",
+        message: modalMode === "add" ? "Customer saved successfully." : "Customer updated successfully.",
+      });
       closeModal();
     } catch (error) {
-      setActionError(getFirebaseErrorMessage(error, "Unable to save customer."));
+      const message = getFirebaseErrorMessage(error, "Unable to save customer.");
+      setActionError(message);
+      showToast({ type: "error", message });
       setSubmitting(false);
     }
   }
@@ -290,9 +369,12 @@ function Customers() {
     try {
       await deleteCustomer(customerPendingDelete.id);
       await loadCustomers();
+      showToast({ type: "success", message: "Customer deleted successfully." });
       closeDeleteModal();
     } catch (error) {
-      setActionError(getFirebaseErrorMessage(error, "Unable to delete customer."));
+      const message = getFirebaseErrorMessage(error, "Unable to delete customer.");
+      setActionError(message);
+      showToast({ type: "error", message });
       setDeleting(false);
     }
   }
@@ -362,7 +444,98 @@ function Customers() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-3xl bg-white shadow-md">
+        <section className="space-y-3 md:hidden">
+          {loading ? (
+            <div className="rounded-3xl bg-white p-5 text-center text-sm text-slate-500 shadow-md">
+              Loading customers...
+            </div>
+          ) : fetchError ? (
+            <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 shadow-md">
+              {fetchError}
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div className="rounded-3xl bg-white p-5 text-center text-sm text-slate-500 shadow-md">
+              No customers found yet.
+            </div>
+          ) : (
+            filteredCustomers.map((customer) => (
+              <article key={customer.id} className="rounded-3xl bg-white p-5 shadow-md">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-xs text-slate-500">
+                      {customer.displayId}
+                    </p>
+                    <h3 className="mt-2 text-lg font-bold text-slate-900">
+                      {customer.firstName} {customer.lastName}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">{customer.contactNumber}</p>
+                  </div>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getTrustStatusClass(
+                      customer.trustStatus,
+                    )}`}
+                  >
+                    {getTrustStatusLabel(customer.trustStatus)}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500">Account</p>
+                    <p className="mt-1 font-semibold text-slate-900">
+                      {getAccountTypeLabel(customer.accountType)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Balance</p>
+                    <p className="mt-1 font-bold text-slate-900">
+                      {formatCurrency(customer.currentBalance)}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-slate-500">Payment Habit</p>
+                    <p className="mt-1 font-medium text-slate-700">
+                      {getPaymentScheduleLabel(customer.paymentSchedule)}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="mt-3 line-clamp-2 text-sm text-slate-500">
+                  {customer.address}
+                </p>
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openViewModal(customer)}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-600"
+                  >
+                    <Eye size={14} />
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(customer)}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-amber-300 hover:text-amber-600"
+                  >
+                    <Pencil size={14} />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDeleteModal(customer)}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-red-300 hover:text-red-600"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </section>
+
+        <section className="hidden overflow-hidden rounded-3xl bg-white shadow-md md:block">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
@@ -556,6 +729,38 @@ function Customers() {
                       {formatCurrency(selectedCustomer.currentBalance)}
                     </p>
                   </div>
+                  <div className="rounded-2xl bg-cyan-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-600">
+                      Total Borrowings
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {formatCurrency(selectedCustomerSummary.totalBorrowings)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                      Total Payments
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {formatCurrency(selectedCustomerSummary.totalPayments)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+                      Outstanding Balance
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {formatCurrency(selectedCustomerSummary.outstandingBalance)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-violet-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">
+                      Number of Transactions
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {selectedCustomerSummary.transactionCount}
+                    </p>
+                  </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Account Type
@@ -604,14 +809,96 @@ function Customers() {
                       {selectedCustomer.communityNotes || "-"}
                     </p>
                   </div>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 sm:col-span-2">
+                    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                      <h4 className="font-semibold text-slate-900">Recent Transactions</h4>
+                    </div>
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead className="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Transaction ID</th>
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">Grand Total</th>
+                          <th className="px-4 py-3">Remaining</th>
+                          <th className="px-4 py-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white text-sm">
+                        {selectedCustomerSummary.recentTransactions.length === 0 ? (
+                          <tr>
+                            <td className="px-4 py-5 text-slate-500" colSpan="5">
+                              No borrowing history yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedCustomerSummary.recentTransactions.map((debt) => (
+                            <tr key={debt.id}>
+                              <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                                {debt.transactionId}
+                              </td>
+                              <td className="px-4 py-3">{formatDate(debt.date)}</td>
+                              <td className="px-4 py-3">{formatCurrency(debt.total)}</td>
+                              <td className="px-4 py-3 font-semibold text-cyan-700">
+                                {formatCurrency(debt.remainingBalance ?? debt.total)}
+                              </td>
+                              <td className="px-4 py-3">
+                                {Number(debt.remainingBalance ?? debt.total) <= 0 ? "PAID" : "UNPAID"}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 sm:col-span-2">
+                    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                      <h4 className="font-semibold text-slate-900">Recent Payments</h4>
+                    </div>
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead className="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Receipt No.</th>
+                          <th className="px-4 py-3">Transaction ID</th>
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">Payment</th>
+                          <th className="px-4 py-3">Remaining</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white text-sm">
+                        {selectedCustomerSummary.recentPayments.length === 0 ? (
+                          <tr>
+                            <td className="px-4 py-5 text-slate-500" colSpan="5">
+                              No payment history yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedCustomerSummary.recentPayments.map((payment) => (
+                            <tr key={payment.id}>
+                              <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                                {payment.paymentId}
+                              </td>
+                              <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                                {payment.transactionId}
+                              </td>
+                              <td className="px-4 py-3">{formatDate(payment.date)}</td>
+                              <td className="px-4 py-3 font-semibold text-emerald-700">
+                                {formatCurrency(payment.amount)}
+                              </td>
+                              <td className="px-4 py-3 font-semibold text-cyan-700">
+                                {formatCurrency(payment.remainingBalance)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <form className="space-y-5 p-6" onSubmit={handleSubmit}>
                   <div className="grid gap-5 sm:grid-cols-2">
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        First Name
-                      </span>
+                      <FieldLabel required>First Name</FieldLabel>
                       <input
                         type="text"
                         value={form.firstName}
@@ -629,9 +916,7 @@ function Customers() {
                     </label>
 
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Last Name
-                      </span>
+                      <FieldLabel required>Last Name</FieldLabel>
                       <input
                         type="text"
                         value={form.lastName}
@@ -649,9 +934,7 @@ function Customers() {
                     </label>
 
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Contact Number
-                      </span>
+                      <FieldLabel required>Contact Number</FieldLabel>
                       <input
                         type="text"
                         value={form.contactNumber}
@@ -674,9 +957,7 @@ function Customers() {
                     </label>
 
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Current Balance
-                      </span>
+                      <FieldLabel required>Current Balance</FieldLabel>
                       <input
                         type="number"
                         min="0"
@@ -698,9 +979,7 @@ function Customers() {
                     </label>
 
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Account Type
-                      </span>
+                      <FieldLabel>Account Type</FieldLabel>
                       <select
                         value={form.accountType}
                         onChange={(event) =>
@@ -720,9 +999,7 @@ function Customers() {
                     </label>
 
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Household / Family Name
-                      </span>
+                      <FieldLabel>Household / Family Name</FieldLabel>
                       <input
                         type="text"
                         value={form.householdName}
@@ -738,9 +1015,7 @@ function Customers() {
                     </label>
 
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Tiwala Status
-                      </span>
+                      <FieldLabel>Tiwala Status</FieldLabel>
                       <select
                         value={form.trustStatus}
                         onChange={(event) =>
@@ -760,9 +1035,7 @@ function Customers() {
                     </label>
 
                     <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Expected Payment Habit
-                      </span>
+                      <FieldLabel>Expected Payment Habit</FieldLabel>
                       <select
                         value={form.paymentSchedule}
                         onChange={(event) =>
@@ -809,9 +1082,7 @@ function Customers() {
                   )}
 
                   <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-slate-700">
-                      Address
-                    </span>
+                    <FieldLabel required>Address</FieldLabel>
                     <textarea
                       value={form.address}
                       onChange={(event) =>
@@ -829,9 +1100,7 @@ function Customers() {
                   </label>
 
                   <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-slate-700">
-                      Community Notes
-                    </span>
+                    <FieldLabel>Community Notes</FieldLabel>
                     <textarea
                       value={form.communityNotes}
                       onChange={(event) =>
@@ -863,7 +1132,7 @@ function Customers() {
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+                      className="rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition duration-1000 hover:bg-cyan-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {submitting
                         ? "Saving..."
@@ -930,7 +1199,7 @@ function Customers() {
                     type="button"
                     onClick={handleDeleteConfirm}
                     disabled={deleting}
-                    className="rounded-2xl bg-red-500 px-5 py-3 font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="rounded-2xl bg-red-500 px-5 py-3 font-semibold text-white transition duration-1000 hover:bg-red-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {deleting ? "Deleting..." : "Delete Customer"}
                   </button>

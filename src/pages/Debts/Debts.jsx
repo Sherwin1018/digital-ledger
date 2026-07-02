@@ -13,10 +13,13 @@ import {
   X,
 } from "lucide-react";
 import CustomerCombobox from "../../components/forms/CustomerCombobox";
+import FieldLabel from "../../components/forms/FieldLabel";
 import DashboardLayout from "../../components/layout/DashboardLayout";
+import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
 import { addDebt, getDebts } from "../../services/debtsService";
+import { getPayments } from "../../services/paymentsService";
 import {
   COMMON_STORE_ITEMS,
   getPaymentScheduleLabel,
@@ -24,6 +27,7 @@ import {
   getTrustStatusLabel,
 } from "../../utils/customerCulture";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
+import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
 const emptyForm = {
   customerId: "",
@@ -57,6 +61,31 @@ function formatDate(timestamp) {
   }).format(date);
 }
 
+function getJsDate(timestamp) {
+  if (!timestamp) {
+    return null;
+  }
+
+  if (typeof timestamp.toDate === "function") {
+    return timestamp.toDate();
+  }
+
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getDateKey(timestamp) {
+  const date = getJsDate(timestamp);
+
+  if (!date) {
+    return "unknown-date";
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 function getDebtItems(debt) {
   if (Array.isArray(debt.items) && debt.items.length > 0) {
     return debt.items;
@@ -70,6 +99,55 @@ function getDebtItems(debt) {
       total: debt.total,
     },
   ];
+}
+
+function getTotalItemQuantity(debt) {
+  return getDebtItems(debt).reduce(
+    (sum, item) => sum + Number(item.quantity || 0),
+    0,
+  );
+}
+
+function groupDebtsByCustomerDate(debts) {
+  const groups = new Map();
+
+  debts.forEach((debt) => {
+    const status = getDebtPaymentStatus(debt);
+    const key = `${debt.customerId}-${getDateKey(debt.date)}-${status}`;
+    const existing = groups.get(key);
+
+    if (!existing) {
+      groups.set(key, {
+        ...debt,
+        id: key,
+        debtIds: [debt.id],
+        transactionIds: [debt.transactionId],
+        items: getDebtItems(debt),
+        product: debt.product,
+        total: Number(debt.total || 0),
+        remainingBalance: Number(debt.remainingBalance ?? debt.total ?? 0),
+        status,
+        remarks: debt.remarks || "-",
+      });
+      return;
+    }
+
+    existing.debtIds.push(debt.id);
+    existing.transactionIds.push(debt.transactionId);
+    existing.items = [...existing.items, ...getDebtItems(debt)];
+    existing.product = `${existing.product}, ${debt.product}`;
+    existing.total += Number(debt.total || 0);
+    existing.remainingBalance += Number(debt.remainingBalance ?? debt.total ?? 0);
+    existing.transactionId =
+      existing.transactionIds.length > 1
+        ? `${existing.transactionIds[0]} +${existing.transactionIds.length - 1}`
+        : existing.transactionIds[0];
+    existing.remarks = [existing.remarks, debt.remarks].filter(Boolean).join(" / ");
+  });
+
+  return [...groups.values()].sort(
+    (left, right) => (getJsDate(right.date)?.getTime() || 0) - (getJsDate(left.date)?.getTime() || 0),
+  );
 }
 
 function escapeHtml(value) {
@@ -87,7 +165,14 @@ function getDebtFilename(debt, extension) {
 }
 
 function getPaymentStatusClass(status) {
-  return status === "Paid" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700";
+  return status === "PAID" || status === "Paid"
+    ? "bg-emerald-100 text-emerald-700"
+    : "bg-amber-100 text-amber-700";
+}
+
+function getDebtPaymentStatus(debt) {
+  const balance = Number(debt.remainingBalance ?? debt.total ?? 0);
+  return balance <= 0 ? "PAID" : "UNPAID";
 }
 
 function downloadDebtPdf(debt, paymentStatus = "Unpaid") {
@@ -100,11 +185,12 @@ function downloadDebtPdf(debt, paymentStatus = "Unpaid") {
   document.text(`Transaction ID: ${debt.transactionId}`, 14, 30);
   document.text(`Customer: ${debt.customerName}`, 14, 37);
   document.text(`Date: ${formatDate(debt.date)}`, 14, 44);
-  document.text(`Running Balance: ${formatCurrency(debt.runningBalance)}`, 14, 51);
-  document.text(`Status: ${paymentStatus}`, 14, 58);
+  document.text(`Grand Total: ${formatCurrency(debt.total)}`, 14, 51);
+  document.text(`Remaining Balance: ${formatCurrency(debt.remainingBalance)}`, 14, 58);
+  document.text(`Status: ${paymentStatus}`, 14, 65);
 
   autoTable(document, {
-    startY: 68,
+    startY: 75,
     head: [["Item", "Quantity", "Unit Price", "Line Total"]],
     body: items.map((item) => [
       item.product,
@@ -145,8 +231,8 @@ function downloadDebtExcel(debt, paymentStatus = "Unpaid") {
           <tr><td><strong>Customer</strong></td><td>${escapeHtml(debt.customerName)}</td></tr>
           <tr><td><strong>Date</strong></td><td>${escapeHtml(formatDate(debt.date))}</td></tr>
           <tr><td><strong>Status</strong></td><td>${escapeHtml(paymentStatus)}</td></tr>
-          <tr><td><strong>Total</strong></td><td>${Number(debt.total || 0)}</td></tr>
-          <tr><td><strong>Running Balance</strong></td><td>${Number(debt.runningBalance || 0)}</td></tr>
+          <tr><td><strong>Grand Total</strong></td><td>${Number(debt.total || 0)}</td></tr>
+          <tr><td><strong>Remaining Balance</strong></td><td>${Number(debt.remainingBalance ?? debt.total ?? 0)}</td></tr>
           <tr><td><strong>Remarks</strong></td><td>${escapeHtml(debt.remarks || "-")}</td></tr>
         </table>
         <table border="1">
@@ -206,6 +292,7 @@ function validateDebtForm(form) {
 
 function Debts() {
   const [debts, setDebts] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(!firebaseConfigError);
@@ -216,24 +303,34 @@ function Debts() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const { showToast } = useToast();
+
+  const activeDebtGroups = useMemo(
+    () =>
+      groupDebtsByCustomerDate(
+        debts.filter((debt) => Number(debt.remainingBalance ?? debt.total ?? 0) > 0),
+      ),
+    [debts],
+  );
 
   const filteredDebts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
     if (!term) {
-      return debts;
+      return activeDebtGroups;
     }
 
-    return debts.filter((debt) => {
+    return activeDebtGroups.filter((debt) => {
       return (
         debt.transactionId.toLowerCase().includes(term) ||
+        debt.transactionIds?.some((transactionId) => transactionId.toLowerCase().includes(term)) ||
         debt.customerName.toLowerCase().includes(term) ||
         debt.product.toLowerCase().includes(term) ||
         getDebtItems(debt).some((item) => item.product.toLowerCase().includes(term)) ||
         debt.remarks.toLowerCase().includes(term)
       );
     });
-  }, [debts, searchTerm]);
+  }, [activeDebtGroups, searchTerm]);
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === form.customerId) || null,
@@ -255,15 +352,31 @@ function Debts() {
 
   const projectedRunningBalance = (selectedCustomer?.currentBalance || 0) + computedTotal;
 
-  function getDebtCustomer(debt) {
-    return customers.find((customer) => customer.id === debt.customerId) || null;
-  }
+  const selectedDebtPayments = useMemo(() => {
+    if (!selectedDebt) {
+      return [];
+    }
 
-  function getDebtPaymentStatus(debt) {
-    const customer = getDebtCustomer(debt);
-    const balance = Number(customer?.currentBalance ?? debt.runningBalance ?? 0);
+    return payments
+      .filter((payment) => {
+        const debtIds = new Set(selectedDebt.debtIds || [selectedDebt.id]);
 
-    return balance <= 0 ? "Paid" : "Unpaid";
+        return (
+          debtIds.has(payment.debtId) ||
+          payment.debtAllocations?.some((allocation) => debtIds.has(allocation.debtId))
+        );
+      })
+      .sort((left, right) => {
+        const leftDate =
+          typeof left.date?.toDate === "function" ? left.date.toDate() : new Date(left.date);
+        const rightDate =
+          typeof right.date?.toDate === "function" ? right.date.toDate() : new Date(right.date);
+        return rightDate - leftDate;
+      });
+  }, [payments, selectedDebt]);
+
+  function getDebtRemainingBalance(debt) {
+    return Number(debt.remainingBalance ?? debt.total ?? 0);
   }
 
   async function loadData() {
@@ -271,9 +384,16 @@ function Debts() {
     setFetchError("");
 
     try {
-      const [nextCustomers, nextDebts] = await Promise.all([getCustomers(), getDebts()]);
+      const [nextCustomers, nextDebts, nextPayments] = await Promise.all([
+        getCustomers(),
+        getDebts(),
+        getPayments(),
+      ]);
+      const reconciledLedger = reconcileLedger(nextDebts, nextPayments);
+
       setCustomers(nextCustomers);
-      setDebts(nextDebts);
+      setDebts(reconciledLedger.debts);
+      setPayments(reconciledLedger.payments);
     } catch (error) {
       setFetchError(getFirebaseErrorMessage(error, "Failed to load debts."));
     } finally {
@@ -357,9 +477,12 @@ function Debts() {
           : "",
       });
       await loadData();
+      showToast({ type: "success", message: "Debt transaction saved successfully." });
       closeModal();
     } catch (error) {
-      setActionError(getFirebaseErrorMessage(error, "Unable to save debt entry."));
+      const message = getFirebaseErrorMessage(error, "Unable to save debt entry.");
+      setActionError(message);
+      showToast({ type: "error", message });
       setSubmitting(false);
     }
   }
@@ -385,7 +508,7 @@ function Debts() {
             type="button"
             onClick={openAddModal}
             disabled={Boolean(firebaseConfigError)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition duration-1000 hover:bg-cyan-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Plus size={18} />
             Add Pa-lista Entry
@@ -424,17 +547,111 @@ function Debts() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-3xl bg-white shadow-md">
+        <section className="space-y-3 md:hidden">
+          {loading ? (
+            <div className="rounded-3xl bg-white p-5 text-center text-sm text-slate-500 shadow-md">
+              Loading debt ledger...
+            </div>
+          ) : fetchError ? (
+            <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 shadow-md">
+              {fetchError}
+            </div>
+          ) : filteredDebts.length === 0 ? (
+            <div className="rounded-3xl bg-white p-5 text-center text-sm text-slate-500 shadow-md">
+              No debt entries yet.
+            </div>
+          ) : (
+            filteredDebts.map((debt) => {
+              const paymentStatus = getDebtPaymentStatus(debt);
+
+              return (
+                <article key={debt.id} className="rounded-3xl bg-white p-5 shadow-md">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-xs text-slate-500">
+                        {debt.transactionId}
+                      </p>
+                      <h3 className="mt-2 text-lg font-bold text-slate-900">
+                        {debt.customerName}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {formatDate(debt.date)}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(
+                        paymentStatus,
+                      )}`}
+                    >
+                      {paymentStatus}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
+                    <div>
+                      <p className="text-xs text-slate-500">Items</p>
+                      <p className="mt-1 font-bold text-slate-900">
+                        {getTotalItemQuantity(debt)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Total</p>
+                      <p className="mt-1 font-bold text-slate-900">
+                        {formatCurrency(debt.total)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Remaining</p>
+                      <p className="mt-1 font-bold text-cyan-700">
+                        {formatCurrency(getDebtRemainingBalance(debt))}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-sm text-slate-500">{debt.remarks || "-"}</p>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDebt(debt)}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition duration-1000 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95"
+                    >
+                      <Eye size={14} />
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadDebtPdf(debt, paymentStatus)}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-200 hover:bg-red-50"
+                    >
+                      <FileText size={14} />
+                      PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadDebtExcel(debt, paymentStatus)}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-emerald-600 transition hover:border-emerald-200 hover:bg-emerald-50"
+                    >
+                      <FileSpreadsheet size={14} />
+                      Excel
+                    </button>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </section>
+
+        <section className="hidden overflow-hidden rounded-3xl bg-white shadow-md md:block">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr className="text-left text-sm font-semibold text-slate-600">
                   <th className="px-6 py-4">Transaction ID</th>
                   <th className="px-6 py-4">Customer</th>
-                  <th className="px-6 py-4">Items</th>
-                  <th className="px-6 py-4">Lines</th>
+                  <th className="px-6 py-4">Total Items</th>
                   <th className="px-6 py-4">Total</th>
-                  <th className="px-6 py-4">Running Balance</th>
+                  <th className="px-6 py-4">Remaining Balance</th>
                   <th className="px-6 py-4">Date</th>
                   <th className="px-6 py-4">Remarks</th>
                   <th className="px-6 py-4 text-right">Proof</th>
@@ -443,25 +660,24 @@ function Debts() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="10">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
                       Loading debt ledger...
                     </td>
                   </tr>
                 ) : fetchError ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-red-600" colSpan="10">
+                    <td className="px-6 py-12 text-center text-red-600" colSpan="8">
                       {fetchError}
                     </td>
                   </tr>
                 ) : filteredDebts.length === 0 ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="10">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
                       No debt entries yet.
                     </td>
                   </tr>
                 ) : (
                   filteredDebts.map((debt) => {
-                    const items = getDebtItems(debt);
                     const paymentStatus = getDebtPaymentStatus(debt);
 
                     return (
@@ -472,29 +688,14 @@ function Debts() {
                         <td className="px-6 py-4 font-medium text-slate-900">
                           {debt.customerName}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            {items.slice(0, 3).map((item, index) => (
-                              <p key={`${debt.id}-${item.product}-${index}`}>
-                                {item.quantity} x {item.product}{" "}
-                                <span className="text-slate-400">
-                                  ({formatCurrency(item.total)})
-                                </span>
-                              </p>
-                            ))}
-                            {items.length > 3 && (
-                              <p className="text-xs text-slate-500">
-                                +{items.length - 3} more item(s)
-                              </p>
-                            )}
-                          </div>
+                        <td className="px-6 py-4 font-semibold text-slate-900">
+                          {getTotalItemQuantity(debt)}
                         </td>
-                        <td className="px-6 py-4">{items.length}</td>
                         <td className="px-6 py-4 font-semibold text-slate-900">
                           {formatCurrency(debt.total)}
                         </td>
                         <td className="px-6 py-4 font-semibold text-cyan-700">
-                          {formatCurrency(debt.runningBalance)}
+                          {formatCurrency(getDebtRemainingBalance(debt))}
                         </td>
                         <td className="px-6 py-4">{formatDate(debt.date)}</td>
                         <td className="px-6 py-4">
@@ -514,7 +715,7 @@ function Debts() {
                             <button
                               type="button"
                               onClick={() => setSelectedDebt(debt)}
-                              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+                              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition duration-1000 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95"
                             >
                               <Eye size={14} />
                               View
@@ -580,9 +781,7 @@ function Debts() {
                 <form className="space-y-5 p-6" onSubmit={handleSubmit}>
                   <div className="grid gap-5 sm:grid-cols-2">
                     <label className="block sm:col-span-2">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Customer
-                      </span>
+                      <FieldLabel required>Customer</FieldLabel>
                       <CustomerCombobox
                         customers={customers}
                         selectedCustomerId={form.customerId}
@@ -654,7 +853,7 @@ function Debts() {
                             >
                               <label className="block">
                                 <span className="mb-1 block text-xs font-medium text-slate-500">
-                                  Product
+                                  Product <span className="text-red-500">*</span>
                                 </span>
                                 <input
                                   type="text"
@@ -670,7 +869,7 @@ function Debts() {
 
                               <label className="block">
                                 <span className="mb-1 block text-xs font-medium text-slate-500">
-                                  Qty
+                                  Qty <span className="text-red-500">*</span>
                                 </span>
                                 <input
                                   type="number"
@@ -686,7 +885,7 @@ function Debts() {
 
                               <label className="block">
                                 <span className="mb-1 block text-xs font-medium text-slate-500">
-                                  Unit Price
+                                  Unit Price <span className="text-red-500">*</span>
                                 </span>
                                 <input
                                   type="number"
@@ -731,7 +930,7 @@ function Debts() {
 
                     <label className="block sm:col-span-2">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
-                        Remarks
+                        Remarks <span className="text-slate-400">◌</span>
                       </span>
                       <textarea
                         value={form.remarks}
@@ -838,7 +1037,7 @@ function Debts() {
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition duration-1000 hover:bg-cyan-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <ReceiptText size={18} />
                       {submitting ? "Saving..." : "Save Debt Entry"}
@@ -866,6 +1065,9 @@ function Debts() {
                     </h3>
                     <p className="text-sm text-slate-500">
                       Full item list for {selectedDebt.transactionId}.
+                      {selectedDebt.transactionIds?.length > 1
+                        ? ` Includes ${selectedDebt.transactionIds.join(", ")}.`
+                        : ""}
                     </p>
                   </div>
                 </div>
@@ -904,7 +1106,7 @@ function Debts() {
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Total Utang
+                      Grand Total
                     </p>
                     <p className="mt-2 font-semibold text-slate-900">
                       {formatCurrency(selectedDebt.total)}
@@ -916,6 +1118,25 @@ function Debts() {
                     </p>
                     <p className="mt-2 font-semibold text-slate-900">
                       {formatDate(selectedDebt.date)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Transaction ID
+                    </p>
+                    <p className="mt-2 font-mono text-sm font-semibold text-slate-900">
+                      {selectedDebt.transactionId}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Remaining Balance
+                    </p>
+                    <p className="mt-2 font-semibold text-cyan-700">
+                      {formatCurrency(getDebtRemainingBalance(selectedDebt))}
                     </p>
                   </div>
                 </div>
@@ -950,6 +1171,49 @@ function Debts() {
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
                   <span className="font-semibold text-slate-900">Remarks:</span>{" "}
                   {selectedDebt.remarks || "-"}
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-slate-200">
+                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <h4 className="font-semibold text-slate-900">Payment History</h4>
+                    <p className="text-sm text-slate-500">
+                      Records are append-only and never overwritten.
+                    </p>
+                  </div>
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-white">
+                      <tr className="text-left text-sm font-semibold text-slate-600">
+                        <th className="px-4 py-3">Receipt No.</th>
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Payment</th>
+                        <th className="px-4 py-3">Remaining After</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white text-sm">
+                      {selectedDebtPayments.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-5 text-slate-500" colSpan="4">
+                            No payments recorded for this transaction yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        selectedDebtPayments.map((payment) => (
+                          <tr key={payment.id}>
+                            <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                              {payment.paymentId}
+                            </td>
+                            <td className="px-4 py-3">{formatDate(payment.date)}</td>
+                            <td className="px-4 py-3 font-semibold text-emerald-700">
+                              {formatCurrency(payment.amount)}
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-cyan-700">
+                              {formatCurrency(payment.remainingBalance)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

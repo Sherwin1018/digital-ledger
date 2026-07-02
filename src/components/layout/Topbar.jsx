@@ -3,6 +3,7 @@ import { Bell, Menu, UserCircle } from "lucide-react";
 import { Menu as HeadlessMenu } from "@headlessui/react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
+import { useToast } from "../../context/useToast";
 import { getNotifications } from "../../services/notificationService";
 import { getAdminProfile } from "../../services/profileService";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
@@ -38,6 +39,7 @@ function Topbar({ showMenuButton, onMenuClick }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, logout, configError } = useAuth();
+  const { showToast } = useToast();
   const [profile, setProfile] = useState({
     fullName: "Admin",
     photoDataUrl: "",
@@ -56,6 +58,7 @@ function Topbar({ showMenuButton, onMenuClick }) {
     "/debts": "Debts",
     "/payments": "Payments",
     "/reports": "Reports",
+    "/archives": "Archives",
     "/settings": "Settings",
     "/profile": "Profile",
   };
@@ -117,8 +120,18 @@ function Topbar({ showMenuButton, onMenuClick }) {
   );
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/", { replace: true });
+    try {
+      showToast({ type: "info", message: "Logging out..." });
+      await logout();
+      window.setTimeout(() => {
+        navigate("/", { replace: true, state: { logoutSuccess: true } });
+      }, 1000);
+    } catch (error) {
+      showToast({
+        type: "error",
+        message: getFirebaseErrorMessage(error, "Logout failed. Please try again."),
+      });
+    }
   };
 
   const handleOpenProfile = () => {
@@ -132,7 +145,7 @@ function Topbar({ showMenuButton, onMenuClick }) {
   };
 
   return (
-    <header className="flex items-center justify-between bg-white px-6 py-4 shadow">
+    <header className="sticky top-0 z-20 flex items-center justify-between bg-white px-6 py-4 shadow">
       <div className="flex items-center">
         {showMenuButton && (
           <button

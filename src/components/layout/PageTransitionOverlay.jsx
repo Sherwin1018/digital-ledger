@@ -1,5 +1,6 @@
 import {
   CreditCard,
+  Archive,
   FileText,
   LayoutDashboard,
   Settings,
@@ -14,6 +15,7 @@ const pageTransitionIcons = {
   "/customers": Users,
   "/debts": Wallet,
   "/payments": CreditCard,
+  "/archives": Archive,
   "/reports": FileText,
   "/settings": Settings,
   "/profile": UserCircle,

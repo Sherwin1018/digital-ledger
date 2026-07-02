@@ -16,12 +16,16 @@ import { getDebts } from "../../services/debtsService";
 import { getPayments } from "../../services/paymentsService";
 import { getPaymentSourceLabel } from "../../utils/customerCulture";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
+import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
 const reportOptions = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
-  { value: "yearly", label: "Yearly" },
+  { value: "outstanding", label: "Outstanding Balances" },
+  { value: "paid", label: "Paid Transactions" },
+  { value: "unpaid", label: "Unpaid Transactions" },
+  { value: "topCustomers", label: "Top Customer Balances" },
 ];
 
 function formatCurrency(value) {
@@ -79,14 +83,17 @@ function getRangeBounds(type) {
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
   } else {
-    start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-    end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    return null;
   }
 
   return { start, end };
 }
 
 function isWithinRange(timestamp, range) {
+  if (!range) {
+    return true;
+  }
+
   const date = getJsDate(timestamp);
   return date && date >= range.start && date <= range.end;
 }
@@ -118,10 +125,11 @@ function Reports() {
         getDebts(),
         getPayments(),
       ]);
+      const reconciledLedger = reconcileLedger(nextDebts, nextPayments);
 
       setCustomers(nextCustomers);
-      setDebts(nextDebts);
-      setPayments(nextPayments);
+      setDebts(reconciledLedger.debts);
+      setPayments(reconciledLedger.payments);
     } catch (nextError) {
       setError(getFirebaseErrorMessage(nextError, "Failed to load reports data."));
     } finally {
@@ -140,6 +148,7 @@ function Reports() {
 
   const reportData = useMemo(() => {
     const range = getRangeBounds(reportType);
+    const isTransactionReport = Boolean(range);
     const filteredDebts = debts.filter((debt) => isWithinRange(debt.date, range));
     const filteredPayments = payments.filter((payment) => isWithinRange(payment.date, range));
     const totalDebt = filteredDebts.reduce((sum, debt) => sum + Number(debt.total || 0), 0);
@@ -151,30 +160,81 @@ function Reports() {
       (sum, customer) => sum + Number(customer.currentBalance || 0),
       0,
     );
-    const transactions = [
+    const transactionRows = [
       ...filteredDebts.map((debt) => ({
         id: debt.id,
         type: "Debt",
         transactionId: debt.transactionId,
         customerName: debt.customerName,
         amount: Number(debt.total || 0),
-        balanceAfter: Number(debt.runningBalance || 0),
-        paymentSource: "-",
+        balanceAfter: Number(debt.remainingBalance ?? debt.total ?? 0),
+        paymentSource: Number(debt.remainingBalance ?? debt.total ?? 0) <= 0 ? "PAID" : "UNPAID",
         date: debt.date,
         remarks: debt.remarks || debt.product || "-",
       })),
       ...filteredPayments.map((payment) => ({
         id: payment.id,
         type: "Payment",
-        transactionId: payment.transactionId,
+        transactionId: payment.paymentId || payment.transactionId,
         customerName: payment.customerName,
         amount: Number(payment.amount || 0),
         balanceAfter: Number(payment.remainingBalance || 0),
         paymentSource: getPaymentSourceLabel(payment.paymentSource),
         date: payment.date,
-        remarks: payment.remarks || "-",
+        remarks: `For ${payment.transactionId || "-"}${payment.remarks ? ` - ${payment.remarks}` : ""}`,
       })),
-    ].sort((left, right) => {
+    ];
+
+    let transactions = transactionRows;
+
+    if (reportType === "outstanding") {
+      transactions = customers
+        .filter((customer) => Number(customer.currentBalance || 0) > 0)
+        .map((customer) => ({
+          id: customer.id,
+          type: "Outstanding",
+          transactionId: customer.displayId,
+          customerName: `${customer.firstName} ${customer.lastName}`,
+          amount: Number(customer.currentBalance || 0),
+          balanceAfter: Number(customer.currentBalance || 0),
+          paymentSource: "-",
+          date: customer.createdAt,
+          remarks: customer.contactNumber || "-",
+        }));
+    } else if (reportType === "paid" || reportType === "unpaid") {
+      const shouldBePaid = reportType === "paid";
+      transactions = debts
+        .filter((debt) => (Number(debt.remainingBalance ?? debt.total ?? 0) <= 0) === shouldBePaid)
+        .map((debt) => ({
+          id: debt.id,
+          type: shouldBePaid ? "Paid Debt" : "Unpaid Debt",
+          transactionId: debt.transactionId,
+          customerName: debt.customerName,
+          amount: Number(debt.total || 0),
+          balanceAfter: Number(debt.remainingBalance ?? debt.total ?? 0),
+          paymentSource: shouldBePaid ? "PAID" : "UNPAID",
+          date: debt.date,
+          remarks: debt.remarks || debt.product || "-",
+        }));
+    } else if (reportType === "topCustomers") {
+      transactions = [...customers]
+        .filter((customer) => Number(customer.currentBalance || 0) > 0)
+        .sort((left, right) => Number(right.currentBalance || 0) - Number(left.currentBalance || 0))
+        .slice(0, 10)
+        .map((customer, index) => ({
+          id: customer.id,
+          type: `Top ${index + 1}`,
+          transactionId: customer.displayId,
+          customerName: `${customer.firstName} ${customer.lastName}`,
+          amount: Number(customer.currentBalance || 0),
+          balanceAfter: Number(customer.currentBalance || 0),
+          paymentSource: "-",
+          date: customer.createdAt,
+          remarks: customer.contactNumber || "-",
+        }));
+    }
+
+    transactions = transactions.sort((left, right) => {
       const leftDate = getJsDate(left.date)?.getTime() || 0;
       const rightDate = getJsDate(right.date)?.getTime() || 0;
       return rightDate - leftDate;
@@ -184,6 +244,7 @@ function Reports() {
       range,
       filteredDebts,
       filteredPayments,
+      isTransactionReport,
       totalDebt,
       totalPayments,
       outstandingBalance,
@@ -202,7 +263,9 @@ function Reports() {
     item.remarks,
   ]);
 
-  const rangeLabel = `${formatDate(reportData.range.start)} - ${formatDate(reportData.range.end)}`;
+  const rangeLabel = reportData.range
+    ? `${formatDate(reportData.range.start)} - ${formatDate(reportData.range.end)}`
+    : "All records";
 
   function handleExcelExport() {
     const rows = reportData.transactions
@@ -468,7 +531,75 @@ function Reports() {
             <h2 className="text-xl font-bold text-slate-900">Report Transactions</h2>
             <p className="mt-1 text-sm text-slate-500">Range: {rangeLabel}</p>
 
-            <div className="mt-5 overflow-x-auto">
+            <div className="mt-5 space-y-3 md:hidden">
+              {loading ? (
+                <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+                  Loading report transactions...
+                </div>
+              ) : reportData.transactions.length === 0 ? (
+                <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+                  No transactions found for this period.
+                </div>
+              ) : (
+                reportData.transactions.map((item) => (
+                  <article
+                    key={`${item.type}-mobile-${item.id}`}
+                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-xs text-slate-500">
+                          {item.transactionId}
+                        </p>
+                        <h3 className="mt-2 font-bold text-slate-900">
+                          {item.customerName}
+                        </h3>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          item.type === "Debt"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-emerald-100 text-emerald-700"
+                        }`}
+                      >
+                        {item.type}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-xl bg-white p-3">
+                        <p className="text-xs text-slate-500">Amount</p>
+                        <p className="mt-1 font-bold text-slate-900">
+                          {formatCurrency(item.amount)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white p-3">
+                        <p className="text-xs text-slate-500">Balance After</p>
+                        <p className="mt-1 font-bold text-cyan-700">
+                          {formatCurrency(item.balanceAfter)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white p-3">
+                        <p className="text-xs text-slate-500">Source</p>
+                        <p className="mt-1 font-medium text-slate-700">
+                          {item.paymentSource}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white p-3">
+                        <p className="text-xs text-slate-500">Date</p>
+                        <p className="mt-1 font-medium text-slate-700">
+                          {formatDate(item.date)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-sm text-slate-500">{item.remarks}</p>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="mt-5 hidden overflow-x-auto md:block">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-sm font-semibold text-slate-600">

@@ -15,6 +15,7 @@ import { getDebts } from "../../services/debtsService";
 import { getPayments } from "../../services/paymentsService";
 import { getTrustStatusClass, getTrustStatusLabel } from "../../utils/customerCulture";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
+import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
@@ -152,10 +153,11 @@ function Dashboard() {
         getDebts(),
         getPayments(),
       ]);
+      const reconciledLedger = reconcileLedger(nextDebts, nextPayments);
 
       setCustomers(nextCustomers);
-      setDebts(nextDebts);
-      setPayments(nextPayments);
+      setDebts(reconciledLedger.debts);
+      setPayments(reconciledLedger.payments);
     } catch (nextError) {
       setError(
         getFirebaseErrorMessage(nextError, "Failed to load dashboard analytics."),
@@ -463,7 +465,36 @@ function Dashboard() {
               Most recent collections recorded.
             </p>
 
-            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100">
+            <div className="mt-5 space-y-3 md:hidden">
+              {loading ? (
+                <p className="text-sm text-slate-500">Loading payments...</p>
+              ) : analytics.recentPayments.length === 0 ? (
+                <p className="text-sm text-slate-500">No payments yet.</p>
+              ) : (
+                analytics.recentPayments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {payment.customerName}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatDate(payment.date)}
+                        </p>
+                      </div>
+                      <span className="font-semibold text-emerald-700">
+                        {formatCurrency(payment.amount)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-5 hidden overflow-hidden rounded-2xl border border-slate-100 md:block">
               <table className="min-w-full divide-y divide-slate-100">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>

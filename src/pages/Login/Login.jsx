@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AlertCircle, KeyRound, Mail, WalletCards } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
+import { useToast } from "../../context/useToast";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
 function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, forgotPassword, configError } = useAuth();
+  const { showToast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -15,6 +17,13 @@ function Login() {
   const [submitting, setSubmitting] = useState(false);
 
   const redirectTo = location.state?.from?.pathname || "/dashboard";
+
+  useEffect(() => {
+    if (location.state?.logoutSuccess) {
+      showToast({ type: "success", message: "Logged out successfully." });
+      navigate("/", { replace: true, state: {} });
+    }
+  }, [location.state, navigate, showToast]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -24,9 +33,12 @@ function Login() {
 
     try {
       await login(email, password);
+      showToast({ type: "success", message: "Login successful." });
       navigate(redirectTo, { replace: true, state: { loginSuccess: true } });
     } catch (error) {
-      setError(getFirebaseErrorMessage(error, "Invalid email or password. Please try again."));
+      const message = getFirebaseErrorMessage(error, "Invalid email or password. Please try again.");
+      setError(message);
+      showToast({ type: "error", message });
     } finally {
       setSubmitting(false);
     }
@@ -46,13 +58,14 @@ function Login() {
     try {
       await forgotPassword(email);
       setMessage("Password reset email sent. Please check your inbox.");
+      showToast({ type: "success", message: "Password reset email sent." });
     } catch (error) {
-      setError(
-        getFirebaseErrorMessage(
-          error,
-          "We couldn't send a reset email. Please verify the email address.",
-        ),
+      const message = getFirebaseErrorMessage(
+        error,
+        "We couldn't send a reset email. Please verify the email address.",
       );
+      setError(message);
+      showToast({ type: "error", message });
     } finally {
       setSubmitting(false);
     }
@@ -96,7 +109,9 @@ function Login() {
 
           <form className="space-y-5" onSubmit={handleSubmit}>
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-slate-200">Email</span>
+              <span className="mb-2 block text-sm font-medium text-slate-200">
+                Email <span className="text-red-300">*</span>
+              </span>
               <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-4 py-3">
                 <Mail size={18} className="text-slate-400" />
                 <input
@@ -105,6 +120,7 @@ function Login() {
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="admin@email.com"
                   className="w-full bg-transparent text-white outline-none placeholder:text-slate-500"
+                  required
                   autoComplete="email"
                   disabled={Boolean(configError)}
                 />
@@ -112,7 +128,9 @@ function Login() {
             </label>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-slate-200">Password</span>
+              <span className="mb-2 block text-sm font-medium text-slate-200">
+                Password <span className="text-red-300">*</span>
+              </span>
               <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-4 py-3">
                 <KeyRound size={18} className="text-slate-400" />
                 <input
@@ -121,6 +139,7 @@ function Login() {
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Enter your password"
                   className="w-full bg-transparent text-white outline-none placeholder:text-slate-500"
+                  required
                   autoComplete="current-password"
                   disabled={Boolean(configError)}
                 />
@@ -131,7 +150,7 @@ function Login() {
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="text-sm font-medium text-cyan-300 transition hover:text-cyan-200"
+                className="text-sm font-medium text-cyan-300 transition duration-1000 hover:text-cyan-200 active:scale-95"
                 disabled={submitting || Boolean(configError)}
               >
                 Forgot Password
@@ -156,7 +175,7 @@ function Login() {
             <button
               type="submit"
               disabled={submitting || Boolean(configError)}
-              className="w-full rounded-2xl bg-cyan-500 px-4 py-3 text-base font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+              className="w-full rounded-2xl bg-cyan-500 px-4 py-3 text-base font-semibold text-slate-950 transition duration-1000 hover:bg-cyan-400 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? "Please wait..." : "Login"}
             </button>
