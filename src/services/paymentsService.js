@@ -322,10 +322,14 @@ async function voidPayment(paymentId, reason) {
       : paymentData.debtId
         ? [{ debtId: paymentData.debtId, amount: Number(paymentData.appliedAmount ?? paymentData.amount ?? 0) }]
         : [];
+    const debtSnapshots = await Promise.all(
+      allocations.map((allocation) =>
+        transaction.get(doc(db, DEBTS_COLLECTION, allocation.debtId)),
+      ),
+    );
 
-    for (const allocation of allocations) {
-      const debtRef = doc(db, DEBTS_COLLECTION, allocation.debtId);
-      const debtSnapshot = await transaction.get(debtRef);
+    debtSnapshots.forEach((debtSnapshot, index) => {
+      const allocation = allocations[index];
 
       if (debtSnapshot.exists()) {
         const debtData = debtSnapshot.data();
@@ -333,13 +337,13 @@ async function voidPayment(paymentId, reason) {
           (Number(debtData.remainingBalance ?? debtData.total ?? 0) + Number(allocation.amount || 0)).toFixed(2),
         );
 
-        transaction.update(debtRef, {
+        transaction.update(debtSnapshot.ref, {
           remainingBalance: nextRemainingBalance,
           status: nextRemainingBalance <= 0 ? STATUS_PAID : STATUS_UNPAID,
           updatedAt: now,
         });
       }
-    }
+    });
 
     if (customerSnapshot.exists()) {
       const customerData = customerSnapshot.data();
