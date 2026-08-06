@@ -271,7 +271,7 @@ async function addPayment(entry) {
       entityType: "payment",
       entityId: paymentRef.id,
       paymentId,
-      debtId: entry.debtId,
+      debtId: firstAllocation.debtId,
       transactionId: debtTransactionId,
       customerId: entry.customerId,
       customerName,
