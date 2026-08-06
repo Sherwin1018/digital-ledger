@@ -121,14 +121,28 @@ async function addPayment(entry) {
   const paymentRef = doc(collection(db, PAYMENTS_COLLECTION));
   const customerRef = doc(db, CUSTOMERS_COLLECTION, entry.customerId);
   const auditRef = doc(collection(db, AUDIT_COLLECTION));
-  const unpaidDebtsQuery = query(
+  const customerDebtsQuery = query(
     collection(db, DEBTS_COLLECTION),
     where("customerId", "==", entry.customerId),
-    where("status", "==", STATUS_UNPAID),
-    orderBy("date", "asc"),
   );
-  const unpaidDebtSnapshot = await getDocs(unpaidDebtsQuery);
-  const unpaidDebtRefs = unpaidDebtSnapshot.docs.map((debtDocument) => debtDocument.ref);
+  const customerDebtSnapshot = await getDocs(customerDebtsQuery);
+  const unpaidDebtRefs = customerDebtSnapshot.docs
+    .filter((debtDocument) => {
+      const debtData = debtDocument.data();
+
+      return (
+        !debtData.voided &&
+        debtData.status !== STATUS_PAID &&
+        Number(debtData.remainingBalance ?? debtData.total ?? 0) > 0
+      );
+    })
+    .sort((left, right) => {
+      const leftDate = left.data().date?.toMillis?.() || 0;
+      const rightDate = right.data().date?.toMillis?.() || 0;
+
+      return leftDate - rightDate;
+    })
+    .map((debtDocument) => debtDocument.ref);
 
   await runTransaction(db, async (transaction) => {
     const customerSnapshot = await transaction.get(customerRef);
