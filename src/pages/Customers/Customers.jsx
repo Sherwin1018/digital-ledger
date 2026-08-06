@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import FieldLabel from "../../components/forms/FieldLabel";
 import DashboardLayout from "../../components/layout/DashboardLayout";
+import PaginationControls from "../../components/PaginationControls";
 import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import {
@@ -51,6 +52,7 @@ const emptyForm = {
   communityNotes: "",
   currentBalance: "0",
 };
+const PAGE_SIZE = 25;
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
@@ -142,6 +144,7 @@ function Customers() {
   const [customerPendingDelete, setCustomerPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [page, setPage] = useState(1);
   const { showToast } = useToast();
 
   const filteredCustomers = useMemo(() => {
@@ -166,6 +169,10 @@ function Customers() {
       );
     });
   }, [customers, searchTerm]);
+  const paginatedCustomers = useMemo(
+    () => filteredCustomers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredCustomers, page],
+  );
 
   const duplicateHints = useMemo(() => {
     if (modalMode !== "add") {
@@ -395,7 +402,10 @@ function Customers() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search by name, family, contact, payday, trust, or ID"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
             />
@@ -460,7 +470,7 @@ function Customers() {
               No customers found yet.
             </div>
           ) : (
-            filteredCustomers.map((customer) => (
+            paginatedCustomers.map((customer) => (
               <article key={customer.id} className="rounded-3xl bg-white p-5 shadow-md">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -574,7 +584,7 @@ function Customers() {
                     </td>
                   </tr>
                 ) : (
-                  filteredCustomers.map((customer) => (
+                  paginatedCustomers.map((customer) => (
                     <tr key={customer.id} className="text-sm text-slate-700">
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
                         {customer.displayId}
@@ -643,6 +653,13 @@ function Customers() {
             </table>
           </div>
         </section>
+
+        <PaginationControls
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalItems={filteredCustomers.length}
+          onPageChange={setPage}
+        />
       </div>
 
       {isModalOpen && (
@@ -1193,11 +1210,11 @@ function Customers() {
 
               <div className="space-y-5 p-6">
                 <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-sm text-red-700">
-                  Deactivate{" "}
+                  Confirm deactivation for{" "}
                   <span className="font-semibold">
                     {customerPendingDelete.firstName} {customerPendingDelete.lastName}
                   </span>
-                  ? Existing utang and payments stay preserved.
+                  . This hides the customer from active lists, but existing utang and payments stay preserved.
                 </div>
 
                 {actionError && (

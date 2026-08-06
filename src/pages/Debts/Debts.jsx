@@ -15,6 +15,7 @@ import {
 import CustomerCombobox from "../../components/forms/CustomerCombobox";
 import FieldLabel from "../../components/forms/FieldLabel";
 import DashboardLayout from "../../components/layout/DashboardLayout";
+import PaginationControls from "../../components/PaginationControls";
 import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
@@ -43,6 +44,7 @@ const emptyForm = {
   cashAmount: "",
   remarks: "",
 };
+const PAGE_SIZE = 25;
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
@@ -381,6 +383,7 @@ function Debts() {
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [page, setPage] = useState(1);
   const { showToast } = useToast();
 
   const activeDebtGroups = useMemo(
@@ -414,6 +417,10 @@ function Debts() {
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === form.customerId) || null,
     [customers, form.customerId],
+  );
+  const paginatedDebts = useMemo(
+    () => filteredDebts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredDebts, page],
   );
 
   const computedTotal = useMemo(() => {
@@ -611,7 +618,10 @@ function Debts() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search by customer, product, remarks, or transaction"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
             />
@@ -674,7 +684,7 @@ function Debts() {
               No debt entries yet.
             </div>
           ) : (
-            filteredDebts.map((debt) => {
+            paginatedDebts.map((debt) => {
               const paymentStatus = getDebtPaymentStatus(debt);
 
               return (
@@ -730,6 +740,13 @@ function Debts() {
             })
           )}
         </section>
+
+        <PaginationControls
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalItems={filteredDebts.length}
+          onPageChange={setPage}
+        />
       </div>
 
       {isModalOpen && (
@@ -1344,7 +1361,8 @@ function Debts() {
 
               <div className="space-y-5 p-6">
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                  Void {debtPendingVoid.transactionId} for {debtPendingVoid.customerName}? This restores the customer's balance.
+                  Confirm void for {debtPendingVoid.transactionId} under {debtPendingVoid.customerName}.
+                  This will reverse the unpaid utang, restore the customer's balance, and keep an audit record.
                 </div>
 
                 <label className="block">
@@ -1378,7 +1396,7 @@ function Debts() {
                   <button
                     type="button"
                     onClick={handleVoidConfirm}
-                    disabled={voiding}
+                    disabled={voiding || !voidReason.trim()}
                     className="rounded-2xl bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {voiding ? "Voiding..." : "Void Utang"}

@@ -3,6 +3,7 @@ import jsPDF from "jspdf";
 import { FileText, HandCoins, Plus, Printer, ReceiptText, Search, X } from "lucide-react";
 import CustomerCombobox from "../../components/forms/CustomerCombobox";
 import DashboardLayout from "../../components/layout/DashboardLayout";
+import PaginationControls from "../../components/PaginationControls";
 import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
@@ -25,6 +26,7 @@ const emptyForm = {
   overpaymentAction: "change",
   remarks: "",
 };
+const PAGE_SIZE = 25;
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
@@ -160,6 +162,7 @@ function Payments() {
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [page, setPage] = useState(1);
   const { showToast } = useToast();
 
   const filteredPayments = useMemo(() => {
@@ -183,6 +186,10 @@ function Payments() {
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === form.customerId) || null,
     [customers, form.customerId],
+  );
+  const paginatedPayments = useMemo(
+    () => filteredPayments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredPayments, page],
   );
 
   const unpaidCustomerDebts = useMemo(
@@ -321,7 +328,10 @@ function Payments() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search customer, bayad notes, or receipt"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
             />
@@ -384,7 +394,7 @@ function Payments() {
               No payment history yet.
             </div>
           ) : (
-            filteredPayments.map((payment) => (
+            paginatedPayments.map((payment) => (
               <article key={payment.id} className="rounded-3xl bg-white p-5 shadow-md">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -509,7 +519,7 @@ function Payments() {
                     </td>
                   </tr>
                 ) : (
-                  filteredPayments.map((payment) => (
+                  paginatedPayments.map((payment) => (
                     <tr key={payment.id} className="text-sm text-slate-700">
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
                         {payment.paymentId}
@@ -566,6 +576,13 @@ function Payments() {
             </table>
           </div>
         </section>
+
+        <PaginationControls
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalItems={filteredPayments.length}
+          onPageChange={setPage}
+        />
       </div>
 
       {isModalOpen && (
@@ -815,7 +832,13 @@ function Payments() {
                     </div>
                   )}
 
-                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-500">
+                      {paymentAmount > 0
+                        ? `Ready to record ${formatCurrency(paymentAmount)} for ${selectedCustomer?.firstName || "this customer"}.`
+                        : "Enter an amount, then record the payment."}
+                    </p>
+                    <div className="flex flex-col-reverse gap-3 sm:flex-row">
                     <button
                       type="button"
                       onClick={closeModal}
@@ -825,12 +848,17 @@ function Payments() {
                     </button>
                     <button
                       type="submit"
-                      disabled={submitting}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3 font-semibold text-white transition duration-1000 hover:bg-emerald-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
+                      disabled={submitting || paymentAmount <= 0 || !selectedCustomer}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 text-base font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
                     >
                       <ReceiptText size={18} />
-                      {submitting ? "Saving..." : "Save Payment"}
+                      {submitting
+                        ? "Recording..."
+                        : paymentAmount > 0
+                          ? `Record ${formatCurrency(paymentAmount)}`
+                          : "Record Payment"}
                     </button>
+                    </div>
                   </div>
                 </form>
               </div>
@@ -863,12 +891,13 @@ function Payments() {
 
               <div className="space-y-5 p-6">
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                  Void receipt{" "}
+                  Confirm void for receipt{" "}
                   <span className="font-semibold">{paymentPendingVoid.paymentId}</span>{" "}
-                  for {paymentPendingVoid.customerName}? This will reverse{" "}
+                  under {paymentPendingVoid.customerName}. This will reverse{" "}
                   <span className="font-semibold">
                     {formatCurrency(paymentPendingVoid.appliedAmount ?? paymentPendingVoid.amount)}
                   </span>
+                  , restore the utang balance, and keep an audit record.
                   .
                 </div>
 
@@ -903,7 +932,7 @@ function Payments() {
                   <button
                     type="button"
                     onClick={handleVoidConfirm}
-                    disabled={voiding}
+                    disabled={voiding || !voidReason.trim()}
                     className="rounded-2xl bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {voiding ? "Voiding..." : "Void Payment"}
