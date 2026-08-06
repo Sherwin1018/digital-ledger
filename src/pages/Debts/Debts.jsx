@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
+  ChevronRight,
   Eye,
   FileSpreadsheet,
   FileText,
@@ -18,7 +19,14 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import { useToast } from "../../context/useToast";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
-import { addDebt, getDebts, voidDebt } from "../../services/debtsService";
+import {
+  UTANG_TYPE_BOTH,
+  UTANG_TYPE_CASH,
+  UTANG_TYPE_GOODS,
+  addDebt,
+  getDebts,
+  voidDebt,
+} from "../../services/debtsService";
 import { getPayments } from "../../services/paymentsService";
 import {
   COMMON_STORE_ITEMS,
@@ -31,7 +39,9 @@ import { reconcileLedger } from "../../utils/ledgerReconciliation";
 
 const emptyForm = {
   customerId: "",
+  utangType: UTANG_TYPE_GOODS,
   items: [{ product: "", quantity: "1", unitPrice: "0" }],
+  cashAmount: "",
   remarks: "",
 };
 
@@ -101,6 +111,26 @@ function getDebtItems(debt) {
   ];
 }
 
+function getUtangTypeLabel(type) {
+  if (type === UTANG_TYPE_CASH) {
+    return "Cash";
+  }
+
+  if (type === UTANG_TYPE_BOTH) {
+    return "Goods + Cash";
+  }
+
+  return "Goods";
+}
+
+function hasGoods(type) {
+  return type === UTANG_TYPE_GOODS || type === UTANG_TYPE_BOTH;
+}
+
+function hasCash(type) {
+  return type === UTANG_TYPE_CASH || type === UTANG_TYPE_BOTH;
+}
+
 function getTotalItemQuantity(debt) {
   return getDebtItems(debt).reduce(
     (sum, item) => sum + Number(item.quantity || 0),
@@ -108,46 +138,31 @@ function getTotalItemQuantity(debt) {
   );
 }
 
-function groupDebtsByCustomerDate(debts) {
-  const groups = new Map();
+function addDisplaySequence(debts) {
+  const sorted = [...debts].sort((left, right) => {
+    const leftDate = getJsDate(left.date)?.getTime() || 0;
+    const rightDate = getJsDate(right.date)?.getTime() || 0;
 
-  debts.forEach((debt) => {
-    const status = getDebtPaymentStatus(debt);
-    const key = `${debt.customerId}-${getDateKey(debt.date)}-${status}`;
-    const existing = groups.get(key);
-
-    if (!existing) {
-      groups.set(key, {
-        ...debt,
-        id: key,
-        debtIds: [debt.id],
-        transactionIds: [debt.transactionId],
-        items: getDebtItems(debt),
-        product: debt.product,
-        total: Number(debt.total || 0),
-        remainingBalance: Number(debt.remainingBalance ?? debt.total ?? 0),
-        status,
-        remarks: debt.remarks || "-",
-      });
-      return;
+    if (rightDate !== leftDate) {
+      return rightDate - leftDate;
     }
 
-    existing.debtIds.push(debt.id);
-    existing.transactionIds.push(debt.transactionId);
-    existing.items = [...existing.items, ...getDebtItems(debt)];
-    existing.product = `${existing.product}, ${debt.product}`;
-    existing.total += Number(debt.total || 0);
-    existing.remainingBalance += Number(debt.remainingBalance ?? debt.total ?? 0);
-    existing.transactionId =
-      existing.transactionIds.length > 1
-        ? `${existing.transactionIds[0]} +${existing.transactionIds.length - 1}`
-        : existing.transactionIds[0];
-    existing.remarks = [existing.remarks, debt.remarks].filter(Boolean).join(" / ");
+    return Number(left.debtNumber || 0) - Number(right.debtNumber || 0);
   });
+  const dateCounts = new Map();
 
-  return [...groups.values()].sort(
-    (left, right) => (getJsDate(right.date)?.getTime() || 0) - (getJsDate(left.date)?.getTime() || 0),
-  );
+  return sorted.map((debt) => {
+    const dateKey = debt.dateKey || getDateKey(debt.date);
+    const nextSequence = debt.dailySequence || Number(dateCounts.get(dateKey) || 0) + 1;
+
+    dateCounts.set(dateKey, nextSequence);
+
+    return {
+      ...debt,
+      dateKey,
+      displaySequence: nextSequence,
+    };
+  });
 }
 
 function escapeHtml(value) {
@@ -265,16 +280,19 @@ function downloadDebtExcel(debt, paymentStatus = "Unpaid") {
 
 function validateDebtForm(form) {
   const errors = {};
+  const shouldValidateGoods = hasGoods(form.utangType);
+  const shouldValidateCash = hasCash(form.utangType);
 
   if (!form.customerId) {
     errors.customerId = "Customer is required.";
   }
 
-  if (!form.items.length) {
+  if (shouldValidateGoods && !form.items.length) {
     errors.items = "At least one item is required.";
   }
 
-  form.items.forEach((item) => {
+  if (shouldValidateGoods) {
+    form.items.forEach((item) => {
     const quantity = Number(item.quantity);
     const unitPrice = Number(item.unitPrice);
 
@@ -282,10 +300,19 @@ function validateDebtForm(form) {
       errors.items = "Each item needs a product name.";
     } else if (!Number.isFinite(quantity) || quantity <= 0) {
       errors.items = "Each quantity must be greater than zero.";
-    } else if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      errors.items = "Each unit price must be zero or greater.";
+    } else if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      errors.items = "Each unit price must be greater than zero.";
     }
   });
+  }
+
+  if (shouldValidateCash) {
+    const cashAmount = Number(form.cashAmount);
+
+    if (!Number.isFinite(cashAmount) || cashAmount <= 0) {
+      errors.cashAmount = "Cash utang amount must be greater than zero.";
+    }
+  }
 
   return errors;
 }
@@ -310,7 +337,7 @@ function Debts() {
 
   const activeDebtGroups = useMemo(
     () =>
-      groupDebtsByCustomerDate(
+      addDisplaySequence(
         debts.filter((debt) => Number(debt.remainingBalance ?? debt.total ?? 0) > 0),
       ),
     [debts],
@@ -328,6 +355,7 @@ function Debts() {
         debt.transactionId.toLowerCase().includes(term) ||
         debt.transactionIds?.some((transactionId) => transactionId.toLowerCase().includes(term)) ||
         debt.customerName.toLowerCase().includes(term) ||
+        getUtangTypeLabel(debt.utangType).toLowerCase().includes(term) ||
         debt.product.toLowerCase().includes(term) ||
         getDebtItems(debt).some((item) => item.product.toLowerCase().includes(term)) ||
         debt.remarks.toLowerCase().includes(term)
@@ -341,7 +369,7 @@ function Debts() {
   );
 
   const computedTotal = useMemo(() => {
-    return form.items.reduce((sum, item) => {
+    const goodsTotal = hasGoods(form.utangType) ? form.items.reduce((sum, item) => {
       const quantity = Number(item.quantity);
       const unitPrice = Number(item.unitPrice);
 
@@ -350,8 +378,11 @@ function Debts() {
       }
 
       return sum + quantity * unitPrice;
-    }, 0);
-  }, [form.items]);
+    }, 0) : 0;
+    const cashAmount = hasCash(form.utangType) ? Number(form.cashAmount || 0) : 0;
+
+    return goodsTotal + (Number.isFinite(cashAmount) ? cashAmount : 0);
+  }, [form.cashAmount, form.items, form.utangType]);
 
   const projectedRunningBalance = (selectedCustomer?.currentBalance || 0) + computedTotal;
 
@@ -603,29 +634,39 @@ function Debts() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-mono text-xs text-slate-500">
-                        {debt.transactionId}
+                        #{debt.displaySequence} | {debt.transactionId}
                       </p>
                       <h3 className="mt-2 text-lg font-bold text-slate-900">
                         {debt.customerName}
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        {formatDate(debt.date)}
+                        {formatDate(debt.date)} | {getUtangTypeLabel(debt.utangType)}
                       </p>
                     </div>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(
-                        paymentStatus,
-                      )}`}
-                    >
-                      {paymentStatus}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(
+                          paymentStatus,
+                        )}`}
+                      >
+                        {paymentStatus}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDebt(debt)}
+                        className="rounded-full bg-slate-900 p-2 text-white transition hover:bg-cyan-600"
+                        aria-label="View utang details"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-4 grid grid-cols-3 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
                     <div>
-                      <p className="text-xs text-slate-500">Items</p>
+                      <p className="text-xs text-slate-500">Type</p>
                       <p className="mt-1 font-bold text-slate-900">
-                        {getTotalItemQuantity(debt)}
+                        {getUtangTypeLabel(debt.utangType)}
                       </p>
                     </div>
                     <div>
@@ -645,14 +686,6 @@ function Debts() {
                   <p className="mt-3 text-sm text-slate-500">{debt.remarks || "-"}</p>
 
                   <div className="mt-4 grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDebt(debt)}
-                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition duration-1000 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95"
-                    >
-                      <Eye size={14} />
-                      View
-                    </button>
                     <button
                       type="button"
                       onClick={() => downloadDebtPdf(debt, paymentStatus)}
@@ -688,9 +721,11 @@ function Debts() {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr className="text-left text-sm font-semibold text-slate-600">
+                  <th className="px-6 py-4">Date</th>
+                  <th className="px-6 py-4">Seq.</th>
                   <th className="px-6 py-4">Transaction ID</th>
                   <th className="px-6 py-4">Customer</th>
-                  <th className="px-6 py-4">Total Items</th>
+                  <th className="px-6 py-4">Type</th>
                   <th className="px-6 py-4">Total</th>
                   <th className="px-6 py-4">Remaining Balance</th>
                   <th className="px-6 py-4">Date</th>
@@ -701,19 +736,19 @@ function Debts() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="10">
                       Loading debt ledger...
                     </td>
                   </tr>
                 ) : fetchError ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-red-600" colSpan="8">
+                    <td className="px-6 py-12 text-center text-red-600" colSpan="10">
                       {fetchError}
                     </td>
                   </tr>
                 ) : filteredDebts.length === 0 ? (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="8">
+                    <td className="px-6 py-12 text-center text-slate-500" colSpan="10">
                       No debt entries yet.
                     </td>
                   </tr>
@@ -723,6 +758,10 @@ function Debts() {
 
                     return (
                       <tr key={debt.id} className="text-sm text-slate-700">
+                        <td className="px-6 py-4">{formatDate(debt.date)}</td>
+                        <td className="px-6 py-4 font-semibold text-slate-900">
+                          #{debt.displaySequence}
+                        </td>
                         <td className="px-6 py-4 font-mono text-xs text-slate-500">
                           {debt.transactionId}
                         </td>
@@ -730,7 +769,7 @@ function Debts() {
                           {debt.customerName}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-900">
-                          {getTotalItemQuantity(debt)}
+                          {getUtangTypeLabel(debt.utangType)}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-900">
                           {formatCurrency(debt.total)}
@@ -738,7 +777,9 @@ function Debts() {
                         <td className="px-6 py-4 font-semibold text-cyan-700">
                           {formatCurrency(getDebtRemainingBalance(debt))}
                         </td>
-                        <td className="px-6 py-4">{formatDate(debt.date)}</td>
+                        <td className="px-6 py-4">
+                          {getTotalItemQuantity(debt)}
+                        </td>
                         <td className="px-6 py-4">
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(
@@ -844,6 +885,24 @@ function Debts() {
                     </label>
 
                     <label className="block">
+                      <FieldLabel required>Utang Type</FieldLabel>
+                      <select
+                        value={form.utangType}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            utangType: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-cyan-400"
+                      >
+                        <option value={UTANG_TYPE_GOODS}>Goods</option>
+                        <option value={UTANG_TYPE_CASH}>Cash</option>
+                        <option value={UTANG_TYPE_BOTH}>Goods + Cash</option>
+                      </select>
+                    </label>
+
+                    <label className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
                         Date
                       </span>
@@ -859,6 +918,7 @@ function Debts() {
                       />
                     </label>
 
+                    {hasGoods(form.utangType) && (
                     <div className="space-y-3 sm:col-span-2">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -937,7 +997,7 @@ function Debts() {
                                 </span>
                                 <input
                                   type="number"
-                                  min="0"
+                                  min="0.01"
                                   step="0.01"
                                   value={item.unitPrice}
                                   onChange={(event) =>
@@ -975,6 +1035,32 @@ function Debts() {
                         <p className="text-sm text-red-600">{formErrors.items}</p>
                       )}
                     </div>
+                    )}
+
+                    {hasCash(form.utangType) && (
+                      <label className="block sm:col-span-2">
+                        <FieldLabel required>Cash Utang Amount</FieldLabel>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={form.cashAmount}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              cashAmount: event.target.value,
+                            }))
+                          }
+                          placeholder="0.00"
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-cyan-400"
+                        />
+                        {formErrors.cashAmount && (
+                          <p className="mt-2 text-sm text-red-600">
+                            {formErrors.cashAmount}
+                          </p>
+                        )}
+                      </label>
+                    )}
 
                     <label className="block sm:col-span-2">
                       <span className="mb-2 block text-sm font-medium text-slate-700">
@@ -1170,10 +1256,10 @@ function Debts() {
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Date
+                      Date / Sequence
                     </p>
                     <p className="mt-2 font-semibold text-slate-900">
-                      {formatDate(selectedDebt.date)}
+                      {formatDate(selectedDebt.date)} #{selectedDebt.displaySequence || selectedDebt.dailySequence || "-"}
                     </p>
                   </div>
                 </div>
@@ -1189,6 +1275,14 @@ function Debts() {
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Utang Type
+                    </p>
+                    <p className="mt-2 font-semibold text-slate-900">
+                      {getUtangTypeLabel(selectedDebt.utangType)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Remaining Balance
                     </p>
                     <p className="mt-2 font-semibold text-cyan-700">
@@ -1197,6 +1291,7 @@ function Debts() {
                   </div>
                 </div>
 
+                {hasGoods(selectedDebt.utangType) && (
                 <div className="overflow-hidden rounded-2xl border border-slate-200">
                   <div className="overflow-x-auto">
                   <table className="min-w-[38rem] divide-y divide-slate-200">
@@ -1225,6 +1320,18 @@ function Debts() {
                   </table>
                   </div>
                 </div>
+                )}
+
+                {hasCash(selectedDebt.utangType) && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Cash Utang
+                    </p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">
+                      {formatCurrency(selectedDebt.cashAmount)}
+                    </p>
+                  </div>
+                )}
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
                   <span className="font-semibold text-slate-900">Remarks:</span>{" "}

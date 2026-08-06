@@ -16,6 +16,9 @@ const CUSTOMERS_COLLECTION = "customers";
 const AUDIT_COLLECTION = "auditTrail";
 const STATUS_PAID = "PAID";
 const STATUS_UNPAID = "UNPAID";
+const UTANG_TYPE_GOODS = "goods";
+const UTANG_TYPE_CASH = "cash";
+const UTANG_TYPE_BOTH = "both";
 
 function ensureFirestore() {
   if (!db) {
@@ -29,7 +32,25 @@ function formatTransactionId(debtNumber, documentId) {
   return formatNumericId("DT", debtNumber, documentId);
 }
 
+function getDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function getUtangType(entry) {
+  return [UTANG_TYPE_GOODS, UTANG_TYPE_CASH, UTANG_TYPE_BOTH].includes(entry.utangType)
+    ? entry.utangType
+    : UTANG_TYPE_GOODS;
+}
+
 function normalizeDebtItems(entry) {
+  const utangType = getUtangType(entry);
+
+  if (utangType === UTANG_TYPE_CASH) {
+    return [];
+  }
+
   const sourceItems = Array.isArray(entry.items)
     ? entry.items
     : [
@@ -57,6 +78,7 @@ function normalizeDebtItems(entry) {
 
 function mapDebtSnapshot(snapshot) {
   const data = snapshot.data();
+  const utangType = data.utangType || (Number(data.cashAmount || 0) > 0 ? UTANG_TYPE_BOTH : UTANG_TYPE_GOODS);
   const items = Array.isArray(data.items) && data.items.length > 0
     ? data.items.map((item) => ({
         product: item.product || "",
@@ -79,8 +101,11 @@ function mapDebtSnapshot(snapshot) {
     transactionId: data.transactionId || formatTransactionId(data.debtNumber, snapshot.id),
     customerId: data.customerId || "",
     customerName: data.customerName || "",
+    utangType,
     product: data.product || "",
     items,
+    cashAmount: Number(data.cashAmount || 0),
+    goodsTotal: Number(data.goodsTotal ?? data.total ?? 0),
     quantity: Number(data.quantity || 0),
     unitPrice: Number(data.unitPrice || 0),
     total: Number(data.total || 0),
@@ -95,6 +120,8 @@ function mapDebtSnapshot(snapshot) {
     voidReason: data.voidReason || "",
     voidedAt: data.voidedAt || null,
     date: data.date || null,
+    dateKey: data.dateKey || "",
+    dailySequence: Number(data.dailySequence || 0),
     createdAt: data.createdAt || data.date || null,
     updatedAt: data.updatedAt || data.date || null,
   };
@@ -112,14 +139,17 @@ async function getDebts() {
 async function addDebt(entry) {
   ensureFirestore();
 
+  const utangType = getUtangType(entry);
   const items = normalizeDebtItems(entry);
-  const total = Number(items.reduce((sum, item) => sum + item.total, 0).toFixed(2));
+  const goodsTotal = Number(items.reduce((sum, item) => sum + item.total, 0).toFixed(2));
+  const cashAmount = utangType === UTANG_TYPE_GOODS ? 0 : Number(entry.cashAmount || 0);
+  const total = Number((goodsTotal + cashAmount).toFixed(2));
 
   if (!entry.customerId) {
     throw new Error("Customer is required.");
   }
 
-  if (items.length === 0) {
+  if ((utangType === UTANG_TYPE_GOODS || utangType === UTANG_TYPE_BOTH) && items.length === 0) {
     throw new Error("At least one item is required.");
   }
 
@@ -132,10 +162,14 @@ async function addDebt(entry) {
       throw new Error("Each item quantity must be greater than zero.");
     }
 
-    if (!Number.isFinite(item.unitPrice) || item.unitPrice < 0) {
-      throw new Error("Each item unit price must be zero or greater.");
+    if (!Number.isFinite(item.unitPrice) || item.unitPrice <= 0) {
+      throw new Error("Each item unit price must be greater than zero.");
     }
   });
+
+  if ((utangType === UTANG_TYPE_CASH || utangType === UTANG_TYPE_BOTH) && (!Number.isFinite(cashAmount) || cashAmount <= 0)) {
+    throw new Error("Cash utang amount must be greater than zero.");
+  }
 
   if (!Number.isFinite(total) || total <= 0) {
     throw new Error("Debt total must be greater than zero.");
@@ -169,21 +203,29 @@ async function addDebt(entry) {
       `${customerData.firstName || ""} ${customerData.lastName || ""}`.trim() ||
       entry.customerName ||
       "Unknown Customer";
-    const productSummary = items
-      .map((item) => `${item.quantity} ${item.product}`)
-      .join(", ");
+    const productSummary = [
+      items.map((item) => `${item.quantity} ${item.product}`).join(", "),
+      cashAmount > 0 ? `Cash ${cashAmount}` : "",
+    ].filter(Boolean).join(" + ");
     const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
     const unitPrice = items.length === 1 ? items[0].unitPrice : 0;
 
     const now = Timestamp.now();
+    const dateKey = getDateKey(now.toDate());
+    const dailySequence = await getNextDisplayNumber(transaction, `debts_${dateKey}`);
     const transactionId = formatTransactionId(debtNumber, debtRef.id);
 
     transaction.set(debtRef, {
       customerId: entry.customerId,
       debtNumber,
+      dailySequence,
+      dateKey,
       customerName,
+      utangType,
       product: productSummary,
       items,
+      cashAmount,
+      goodsTotal,
       quantity: totalQuantity,
       unitPrice,
       total,
@@ -213,6 +255,11 @@ async function addDebt(entry) {
       customerId: entry.customerId,
       customerName,
       amount: total,
+      utangType,
+      cashAmount,
+      goodsTotal,
+      dailySequence,
+      dateKey,
       createdAt: now,
     });
   });
@@ -301,4 +348,14 @@ async function getCustomer(customerId) {
   return snapshot.data();
 }
 
-export { STATUS_PAID, STATUS_UNPAID, addDebt, getCustomer, getDebts, voidDebt };
+export {
+  STATUS_PAID,
+  STATUS_UNPAID,
+  UTANG_TYPE_BOTH,
+  UTANG_TYPE_CASH,
+  UTANG_TYPE_GOODS,
+  addDebt,
+  getCustomer,
+  getDebts,
+  voidDebt,
+};

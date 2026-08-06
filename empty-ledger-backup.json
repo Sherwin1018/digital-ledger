@@ -1,0 +1,19 @@
+{
+  "metadata": {
+    "app": "digital-ledger",
+    "version": 1,
+    "exportedAt": "2026-08-06T00:00:00.000Z",
+    "purpose": "empty-ledger-reset"
+  },
+  "collections": {
+    "customers": [],
+    "debts": [],
+    "payments": [],
+    "auditTrail": [],
+    "systemCounters": []
+  },
+  "settings": {
+    "storeProfile": null,
+    "adminProfile": null
+  }
+}

@@ -390,7 +390,7 @@ function Customers() {
     <DashboardLayout>
       <div className="space-y-6">
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex min-w-[260px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <label className="flex min-w-65 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <Search size={18} className="text-slate-400" />
             <input
               type="text"
@@ -662,7 +662,7 @@ function Customers() {
                         ? "Edit Customer"
                         : "View Customer"}
                   </h3>
-                  <p className="break-words text-sm text-slate-500">
+                  <p className="wrap-break-word text-sm text-slate-500">
                     {modalMode === "view"
                       ? "Review customer information."
                       : "All required fields must be completed."}
@@ -816,7 +816,7 @@ function Customers() {
                       <h4 className="font-semibold text-slate-900">Recent Transactions</h4>
                     </div>
                     <div className="overflow-x-auto">
-                    <table className="min-w-[42rem] divide-y divide-slate-200">
+                    <table className="min-w-168 divide-y divide-slate-200">
                       <thead className="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3">Transaction ID</th>
@@ -859,7 +859,7 @@ function Customers() {
                       <h4 className="font-semibold text-slate-900">Recent Payments</h4>
                     </div>
                     <div className="overflow-x-auto">
-                    <table className="min-w-[42rem] divide-y divide-slate-200">
+                    <table className="min-w-168 divide-y divide-slate-200">
                       <thead className="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3">Receipt No.</th>
