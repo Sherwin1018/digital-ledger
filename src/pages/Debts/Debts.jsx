@@ -3,7 +3,6 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   ChevronRight,
-  Eye,
   FileSpreadsheet,
   FileText,
   PackagePlus,
@@ -131,13 +130,6 @@ function hasCash(type) {
   return type === UTANG_TYPE_CASH || type === UTANG_TYPE_BOTH;
 }
 
-function getTotalItemQuantity(debt) {
-  return getDebtItems(debt).reduce(
-    (sum, item) => sum + Number(item.quantity || 0),
-    0,
-  );
-}
-
 function addDisplaySequence(debts) {
   const sorted = [...debts].sort((left, right) => {
     const leftDate = getJsDate(left.date)?.getTime() || 0;
@@ -163,6 +155,62 @@ function addDisplaySequence(debts) {
       displaySequence: nextSequence,
     };
   });
+}
+
+function groupDebtsByCustomer(debts) {
+  const groups = new Map();
+
+  addDisplaySequence(debts).forEach((debt) => {
+    const key = debt.customerId || debt.customerName;
+    const existing = groups.get(key);
+    const debtItems = getDebtItems(debt);
+    const transactionIds = [debt.transactionId].filter(Boolean);
+
+    if (!existing) {
+      groups.set(key, {
+        ...debt,
+        id: `customer-${key}`,
+        debtIds: [debt.id],
+        transactionIds,
+        items: debtItems,
+        total: Number(debt.total || 0),
+        remainingBalance: Number(debt.remainingBalance ?? debt.total ?? 0),
+        cashAmount: Number(debt.cashAmount || 0),
+        goodsTotal: Number(debt.goodsTotal ?? debt.total ?? 0),
+        displaySequence: debt.displaySequence,
+        utangType: debt.utangType,
+      });
+      return;
+    }
+
+    existing.debtIds.push(debt.id);
+    existing.transactionIds.push(...transactionIds);
+    existing.items = [...existing.items, ...debtItems];
+    existing.total += Number(debt.total || 0);
+    existing.remainingBalance += Number(debt.remainingBalance ?? debt.total ?? 0);
+    existing.cashAmount += Number(debt.cashAmount || 0);
+    existing.goodsTotal += Number(debt.goodsTotal ?? debt.total ?? 0);
+    existing.transactionId = `${existing.transactionIds[0]} +${existing.transactionIds.length - 1}`;
+    existing.utangType =
+      existing.cashAmount > 0 && existing.goodsTotal > 0
+        ? UTANG_TYPE_BOTH
+        : existing.cashAmount > 0
+          ? UTANG_TYPE_CASH
+          : UTANG_TYPE_GOODS;
+
+    const existingDate = getJsDate(existing.date)?.getTime() || 0;
+    const nextDate = getJsDate(debt.date)?.getTime() || 0;
+
+    if (nextDate > existingDate) {
+      existing.date = debt.date;
+      existing.dateKey = debt.dateKey;
+      existing.displaySequence = debt.displaySequence;
+    }
+  });
+
+  return [...groups.values()].sort(
+    (left, right) => (getJsDate(right.date)?.getTime() || 0) - (getJsDate(left.date)?.getTime() || 0),
+  );
 }
 
 function escapeHtml(value) {
@@ -337,7 +385,7 @@ function Debts() {
 
   const activeDebtGroups = useMemo(
     () =>
-      addDisplaySequence(
+      groupDebtsByCustomer(
         debts.filter((debt) => Number(debt.remainingBalance ?? debt.total ?? 0) > 0),
       ),
     [debts],
@@ -612,7 +660,7 @@ function Debts() {
           </div>
         </section>
 
-        <section className="space-y-3 md:hidden">
+        <section className="space-y-3">
           {loading ? (
             <div className="rounded-3xl bg-white p-5 text-center text-sm text-slate-500 shadow-md">
               Loading debt ledger...
@@ -630,20 +678,15 @@ function Debts() {
               const paymentStatus = getDebtPaymentStatus(debt);
 
               return (
-                <article key={debt.id} className="rounded-3xl bg-white p-5 shadow-md">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-mono text-xs text-slate-500">
-                        #{debt.displaySequence} | {debt.transactionId}
-                      </p>
-                      <h3 className="mt-2 text-lg font-bold text-slate-900">
+                <article
+                  key={debt.id}
+                  className="flex items-center justify-between gap-4 rounded-3xl bg-white px-5 py-4 shadow-md transition hover:shadow-lg"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-bold text-slate-900">
                         {debt.customerName}
                       </h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {formatDate(debt.date)} | {getUtangTypeLabel(debt.utangType)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(
                           paymentStatus,
@@ -651,189 +694,41 @@ function Debts() {
                       >
                         {paymentStatus}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDebt(debt)}
-                        className="rounded-full bg-slate-900 p-2 text-white transition hover:bg-cyan-600"
-                        aria-label="View utang details"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-500">
+                      <span>{getUtangTypeLabel(debt.utangType)}</span>
+                      <span>{debt.debtIds?.length || 1} active utang</span>
+                      <span>Latest: {formatDate(debt.date)}</span>
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-3 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
-                    <div>
-                      <p className="text-xs text-slate-500">Type</p>
-                      <p className="mt-1 font-bold text-slate-900">
-                        {getUtangTypeLabel(debt.utangType)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Total</p>
-                      <p className="mt-1 font-bold text-slate-900">
-                        {formatCurrency(debt.total)}
-                      </p>
-                    </div>
-                    <div>
+                  <div className="flex shrink-0 items-center gap-4">
+                    <div className="hidden text-right sm:block">
                       <p className="text-xs text-slate-500">Remaining</p>
-                      <p className="mt-1 font-bold text-cyan-700">
+                      <p className="font-bold text-cyan-700">
                         {formatCurrency(getDebtRemainingBalance(debt))}
                       </p>
                     </div>
-                  </div>
-
-                  <p className="mt-3 text-sm text-slate-500">{debt.remarks || "-"}</p>
-
-                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div className="hidden text-right md:block">
+                      <p className="text-xs text-slate-500">Total</p>
+                      <p className="font-semibold text-slate-900">
+                        {formatCurrency(debt.total)}
+                      </p>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => downloadDebtPdf(debt, paymentStatus)}
-                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-200 hover:bg-red-50"
+                      onClick={() => setSelectedDebt(debt)}
+                      className="rounded-full bg-slate-900 p-3 text-white transition hover:bg-cyan-600 active:scale-95"
+                      aria-label={`View ${debt.customerName} utang details`}
                     >
-                      <FileText size={14} />
-                      PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => downloadDebtExcel(debt, paymentStatus)}
-                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-emerald-600 transition hover:border-emerald-200 hover:bg-emerald-50"
-                    >
-                      <FileSpreadsheet size={14} />
-                      Excel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDebtPendingVoid(debt)}
-                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-200 hover:bg-amber-50"
-                    >
-                      Void
+                      <ChevronRight size={18} />
                     </button>
                   </div>
                 </article>
               );
             })
           )}
-        </section>
-
-        <section className="hidden overflow-hidden rounded-3xl bg-white shadow-md md:block">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-sm font-semibold text-slate-600">
-                  <th className="px-6 py-4">Date</th>
-                  <th className="px-6 py-4">Seq.</th>
-                  <th className="px-6 py-4">Transaction ID</th>
-                  <th className="px-6 py-4">Customer</th>
-                  <th className="px-6 py-4">Type</th>
-                  <th className="px-6 py-4">Total</th>
-                  <th className="px-6 py-4">Remaining Balance</th>
-                  <th className="px-6 py-4">Date</th>
-                  <th className="px-6 py-4">Remarks</th>
-                  <th className="px-6 py-4 text-right">Proof</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {loading ? (
-                  <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="10">
-                      Loading debt ledger...
-                    </td>
-                  </tr>
-                ) : fetchError ? (
-                  <tr>
-                    <td className="px-6 py-12 text-center text-red-600" colSpan="10">
-                      {fetchError}
-                    </td>
-                  </tr>
-                ) : filteredDebts.length === 0 ? (
-                  <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan="10">
-                      No debt entries yet.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredDebts.map((debt) => {
-                    const paymentStatus = getDebtPaymentStatus(debt);
-
-                    return (
-                      <tr key={debt.id} className="text-sm text-slate-700">
-                        <td className="px-6 py-4">{formatDate(debt.date)}</td>
-                        <td className="px-6 py-4 font-semibold text-slate-900">
-                          #{debt.displaySequence}
-                        </td>
-                        <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                          {debt.transactionId}
-                        </td>
-                        <td className="px-6 py-4 font-medium text-slate-900">
-                          {debt.customerName}
-                        </td>
-                        <td className="px-6 py-4 font-semibold text-slate-900">
-                          {getUtangTypeLabel(debt.utangType)}
-                        </td>
-                        <td className="px-6 py-4 font-semibold text-slate-900">
-                          {formatCurrency(debt.total)}
-                        </td>
-                        <td className="px-6 py-4 font-semibold text-cyan-700">
-                          {formatCurrency(getDebtRemainingBalance(debt))}
-                        </td>
-                        <td className="px-6 py-4">
-                          {getTotalItemQuantity(debt)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(
-                              paymentStatus,
-                            )}`}
-                          >
-                            {paymentStatus}
-                          </span>
-                          <p className="mt-2 text-xs text-slate-500">
-                            {debt.remarks || "-"}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDebt(debt)}
-                              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition duration-1000 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95"
-                            >
-                              <Eye size={14} />
-                              View
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => downloadDebtPdf(debt, paymentStatus)}
-                              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-200 hover:bg-red-50"
-                            >
-                              <FileText size={14} />
-                              PDF
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => downloadDebtExcel(debt, paymentStatus)}
-                              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-emerald-600 transition hover:border-emerald-200 hover:bg-emerald-50"
-                            >
-                              <FileSpreadsheet size={14} />
-                              Excel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDebtPendingVoid(debt)}
-                              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-200 hover:bg-amber-50"
-                            >
-                              Void
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
         </section>
       </div>
 
