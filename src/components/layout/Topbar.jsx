@@ -175,10 +175,10 @@ function Topbar({ showMenuButton, onMenuClick }) {
             </span>
           </HeadlessMenu.Button>
 
-          <HeadlessMenu.Items className="absolute right-0 z-50 mt-3 w-[calc(100vw-2rem)] max-w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl focus:outline-none">
-            <div className="border-b border-slate-100 px-5 py-4">
+          <HeadlessMenu.Items className="fixed inset-x-3 top-20 z-50 max-h-[70dvh] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl focus:outline-none sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-3 sm:w-[22rem] sm:max-h-none">
+            <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900">Notifications</p>
                   <p className="mt-1 text-xs text-slate-500">
                     {unreadCount} unread notification{unreadCount === 1 ? "" : "s"}
@@ -188,14 +188,14 @@ function Topbar({ showMenuButton, onMenuClick }) {
                 <button
                   type="button"
                   onClick={markNotificationsAsRead}
-                  className="text-xs font-semibold text-cyan-600 transition hover:text-cyan-500"
+                  className="shrink-0 text-xs font-semibold text-cyan-600 transition hover:text-cyan-500"
                 >
                   Mark all as read
                 </button>
               </div>
             </div>
 
-            <div className="max-h-96 overflow-y-auto p-3">
+            <div className="max-h-[calc(70dvh-5rem)] overflow-y-auto p-3 sm:max-h-96">
               {notificationError ? (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {notificationError}
@@ -211,15 +211,17 @@ function Topbar({ showMenuButton, onMenuClick }) {
                     className="mb-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 last:mb-0"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-slate-900">{notification.title}</p>
+                      <div className="min-w-0">
+                        <p className="break-words font-semibold text-slate-900">
+                          {notification.title}
+                        </p>
                         <p className="mt-1 text-sm text-slate-600">
                           {notification.description}
                         </p>
                       </div>
 
                       <span
-                        className={`rounded-full px-3 py-1 text-[11px] font-semibold ${toneClass(notification.tone)}`}
+                        className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${toneClass(notification.tone)}`}
                       >
                         {notification.tone}
                       </span>

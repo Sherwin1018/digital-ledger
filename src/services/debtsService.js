@@ -9,7 +9,7 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "../firebase/firebase";
-import { formatNumericId, getNextDisplayNumber } from "./idService";
+import { formatNumericId, getNextDisplayNumbers } from "./idService";
 
 const DEBTS_COLLECTION = "debts";
 const CUSTOMERS_COLLECTION = "customers";
@@ -198,7 +198,6 @@ async function addDebt(entry) {
 
     const currentBalance = Number(customerData.currentBalance || 0);
     const runningBalance = currentBalance + total;
-    const debtNumber = await getNextDisplayNumber(transaction, "debts");
     const customerName =
       `${customerData.firstName || ""} ${customerData.lastName || ""}`.trim() ||
       entry.customerName ||
@@ -212,7 +211,10 @@ async function addDebt(entry) {
 
     const now = Timestamp.now();
     const dateKey = getDateKey(now.toDate());
-    const dailySequence = await getNextDisplayNumber(transaction, `debts_${dateKey}`);
+    const sequenceKey = `debts_${dateKey}`;
+    const nextNumbers = await getNextDisplayNumbers(transaction, ["debts", sequenceKey]);
+    const debtNumber = nextNumbers.debts;
+    const dailySequence = nextNumbers[sequenceKey];
     const transactionId = formatTransactionId(debtNumber, debtRef.id);
 
     transaction.set(debtRef, {

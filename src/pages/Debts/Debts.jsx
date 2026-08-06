@@ -383,6 +383,7 @@ function Debts() {
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [collapsedItemIndexes, setCollapsedItemIndexes] = useState(new Set());
   const [page, setPage] = useState(1);
   const { showToast } = useToast();
 
@@ -501,6 +502,7 @@ function Debts() {
 
   function openAddModal() {
     setForm(emptyForm);
+    setCollapsedItemIndexes(new Set());
     setFormErrors({});
     setActionError("");
     setSubmitting(false);
@@ -510,6 +512,7 @@ function Debts() {
   function closeModal() {
     setIsModalOpen(false);
     setForm(emptyForm);
+    setCollapsedItemIndexes(new Set());
     setFormErrors({});
     setActionError("");
     setSubmitting(false);
@@ -542,6 +545,20 @@ function Debts() {
     }));
   }
 
+  function toggleItemCollapsed(index) {
+    setCollapsedItemIndexes((current) => {
+      const next = new Set(current);
+
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+
+      return next;
+    });
+  }
+
   function removeItemRow(index) {
     setForm((current) => ({
       ...current,
@@ -550,6 +567,20 @@ function Debts() {
           ? current.items
           : current.items.filter((_, itemIndex) => itemIndex !== index),
     }));
+
+    setCollapsedItemIndexes((current) => {
+      const next = new Set();
+
+      current.forEach((itemIndex) => {
+        if (itemIndex < index) {
+          next.add(itemIndex);
+        } else if (itemIndex > index) {
+          next.add(itemIndex - 1);
+        }
+      });
+
+      return next;
+    });
   }
 
   async function handleSubmit(event) {
@@ -865,79 +896,105 @@ function Debts() {
                             Number.isFinite(quantity) && Number.isFinite(unitPrice)
                               ? quantity * unitPrice
                               : 0;
+                          const isCollapsed = collapsedItemIndexes.has(index);
 
                           return (
                             <div
                               key={`debt-item-${index}`}
-                              className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_110px_130px_auto]"
+                              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                             >
-                              <label className="block">
-                                <span className="mb-1 block text-xs font-medium text-slate-500">
-                                  Product <span className="text-red-500">*</span>
-                                </span>
-                                <input
-                                  type="text"
-                                  value={item.product}
-                                  onChange={(event) =>
-                                    updateItem(index, "product", event.target.value)
-                                  }
-                                  list="common-store-items"
-                                  placeholder="e.g. Sardines"
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-cyan-400"
-                                />
-                              </label>
-
-                              <label className="block">
-                                <span className="mb-1 block text-xs font-medium text-slate-500">
-                                  Qty <span className="text-red-500">*</span>
-                                </span>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  step="1"
-                                  value={item.quantity}
-                                  onChange={(event) =>
-                                    updateItem(index, "quantity", event.target.value)
-                                  }
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-cyan-400"
-                                />
-                              </label>
-
-                              <label className="block">
-                                <span className="mb-1 block text-xs font-medium text-slate-500">
-                                  Unit Price <span className="text-red-500">*</span>
-                                </span>
-                                <input
-                                  type="number"
-                                  min="0.01"
-                                  step="0.01"
-                                  value={item.unitPrice}
-                                  onChange={(event) =>
-                                    updateItem(index, "unitPrice", event.target.value)
-                                  }
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-cyan-400"
-                                />
-                              </label>
-
-                              <div className="flex items-end justify-between gap-3">
-                                <div>
-                                  <span className="mb-1 block text-xs font-medium text-slate-500">
-                                    Line Total
-                                  </span>
-                                  <p className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                              <div className="flex items-center justify-between gap-3 bg-slate-50 px-3 py-3">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold uppercase text-slate-400">
+                                    Product #{index + 1}
+                                  </p>
+                                  <p className="truncate text-sm font-semibold text-slate-900">
+                                    {item.product.trim() || "New product"} ·{" "}
                                     {formatCurrency(lineTotal)}
                                   </p>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeItemRow(index)}
-                                  disabled={form.items.length === 1}
-                                  className="rounded-xl p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-                                  aria-label="Remove item"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleItemCollapsed(index)}
+                                    className="rounded-full border border-cyan-200 px-3 py-1 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50"
+                                  >
+                                    {isCollapsed ? "Show" : "Hide"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeItemRow(index)}
+                                    disabled={form.items.length === 1}
+                                    className="rounded-xl p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                    aria-label="Remove item"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
                               </div>
+
+                              {!isCollapsed && (
+                                <div className="grid gap-3 bg-slate-50/60 p-3 sm:grid-cols-[1fr_110px_130px_auto]">
+                                  <label className="block">
+                                    <span className="mb-1 block text-xs font-medium text-slate-500">
+                                      Product <span className="text-red-500">*</span>
+                                    </span>
+                                    <input
+                                      type="text"
+                                      value={item.product}
+                                      onChange={(event) =>
+                                        updateItem(index, "product", event.target.value)
+                                      }
+                                      list="common-store-items"
+                                      placeholder="e.g. Sardines"
+                                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-cyan-400"
+                                    />
+                                  </label>
+
+                                  <label className="block">
+                                    <span className="mb-1 block text-xs font-medium text-slate-500">
+                                      Qty <span className="text-red-500">*</span>
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      value={item.quantity}
+                                      onChange={(event) =>
+                                        updateItem(index, "quantity", event.target.value)
+                                      }
+                                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-cyan-400"
+                                    />
+                                  </label>
+
+                                  <label className="block">
+                                    <span className="mb-1 block text-xs font-medium text-slate-500">
+                                      Unit Price <span className="text-red-500">*</span>
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      value={item.unitPrice}
+                                      onChange={(event) =>
+                                        updateItem(index, "unitPrice", event.target.value)
+                                      }
+                                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-cyan-400"
+                                    />
+                                  </label>
+
+                                  <div className="flex items-end">
+                                    <div className="w-full">
+                                      <span className="mb-1 block text-xs font-medium text-slate-500">
+                                        Line Total
+                                      </span>
+                                      <p className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                                        {formatCurrency(lineTotal)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

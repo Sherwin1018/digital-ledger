@@ -19,6 +19,25 @@ async function getNextDisplayNumber(transaction, counterKey) {
   return nextValue;
 }
 
+async function getNextDisplayNumbers(transaction, counterKeys) {
+  const counterRef = getCounterRef();
+  const counterSnapshot = await transaction.get(counterRef);
+  const currentCounters = counterSnapshot.data() || {};
+  const updates = {};
+  const nextValues = {};
+
+  counterKeys.forEach((counterKey) => {
+    const nextValue = Number(currentCounters[counterKey] || 0) + 1;
+
+    updates[counterKey] = nextValue;
+    nextValues[counterKey] = nextValue;
+  });
+
+  transaction.set(counterRef, updates, { merge: true });
+
+  return nextValues;
+}
+
 function formatNumericId(prefix, value, fallbackId = "") {
   const number = Number(value);
 
@@ -29,4 +48,4 @@ function formatNumericId(prefix, value, fallbackId = "") {
   return fallbackId ? `${prefix}-${fallbackId.slice(0, 8).toUpperCase()}` : `${prefix}-PENDING`;
 }
 
-export { COUNTERS_COLLECTION, getNextDisplayNumber, formatNumericId };
+export { COUNTERS_COLLECTION, getNextDisplayNumber, getNextDisplayNumbers, formatNumericId };
