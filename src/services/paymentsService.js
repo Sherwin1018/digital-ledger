@@ -178,6 +178,7 @@ async function addPayment(entry) {
       throw new Error("Payment is bigger than the customer's utang. Choose sukli or advance credit.");
     }
 
+    const paymentNumber = await getNextDisplayNumber(transaction, "payments");
     let unappliedAmount = Number(Math.min(amount, customerPreviousBalance).toFixed(2));
     const appliedAmount = unappliedAmount;
     const overpaymentAmount = Number(Math.max(amount - customerPreviousBalance, 0).toFixed(2));
@@ -220,7 +221,6 @@ async function addPayment(entry) {
 
     const customerRemainingBalance = Number(Math.max(customerPreviousBalance - appliedAmount, 0).toFixed(2));
     const status = customerRemainingBalance <= 0 ? STATUS_PAID : STATUS_UNPAID;
-    const paymentNumber = await getNextDisplayNumber(transaction, "payments");
     const customerName =
       `${customerData.firstName || ""} ${customerData.lastName || ""}`.trim() ||
       entry.customerName ||
