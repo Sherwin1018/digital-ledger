@@ -502,7 +502,7 @@ function Debts() {
 
   function openAddModal() {
     setForm(emptyForm);
-    setCollapsedItemIndexes(new Set());
+    setCollapsedItemIndexes(new Set([0]));
     setFormErrors({});
     setActionError("");
     setSubmitting(false);
@@ -543,6 +543,7 @@ function Debts() {
       ...current,
       items: [...current.items, { product: "", quantity: "1", unitPrice: "0" }],
     }));
+    setCollapsedItemIndexes((current) => new Set([...current, form.items.length]));
   }
 
   function toggleItemCollapsed(index) {
