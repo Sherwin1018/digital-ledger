@@ -9,17 +9,17 @@ function PaginationControls({ page, pageSize, totalItems, onPageChange }) {
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-      <span>
+      <span className="text-center sm:text-left">
         Showing {startItem}-{endItem} of {totalItems}
       </span>
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex">
         <button
           type="button"
           onClick={() => onPageChange(Math.max(page - 1, 1))}
           disabled={page <= 1}
-          className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-11 rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Previous
+          Prev
         </button>
         <span className="rounded-xl bg-slate-100 px-3 py-2 font-semibold text-slate-700">
           {page} / {totalPages}
@@ -28,7 +28,7 @@ function PaginationControls({ page, pageSize, totalItems, onPageChange }) {
           type="button"
           onClick={() => onPageChange(Math.min(page + 1, totalPages))}
           disabled={page >= totalPages}
-          className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-11 rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Next
         </button>

@@ -644,7 +644,7 @@ function Debts() {
     <DashboardLayout>
       <div className="space-y-6">
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex min-w-[260px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <label className="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:min-w-[260px] sm:flex-1">
             <Search size={18} className="text-slate-400" />
             <input
               type="text"
@@ -662,7 +662,7 @@ function Debts() {
             type="button"
             onClick={openAddModal}
             disabled={Boolean(firebaseConfigError)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition duration-1000 hover:bg-cyan-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition duration-1000 hover:bg-cyan-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             <Plus size={18} />
             Add Pa-lista Entry
@@ -721,11 +721,11 @@ function Debts() {
               return (
                 <article
                   key={debt.id}
-                  className="flex items-center justify-between gap-4 rounded-3xl bg-white px-5 py-4 shadow-md transition hover:shadow-lg"
+                  className="flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-4 shadow-md transition hover:shadow-lg sm:gap-4 sm:px-5"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-bold text-slate-900">
+                      <h3 className="text-base font-bold text-slate-900 sm:text-lg">
                         {debt.customerName}
                       </h3>
                       <span
@@ -737,7 +737,7 @@ function Debts() {
                       </span>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-500">
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 sm:gap-x-6 sm:text-sm">
                       <span>{getUtangTypeLabel(debt.utangType)}</span>
                       <span>{debt.debtIds?.length || 1} active utang</span>
                       <span>Latest: {formatDate(debt.date)}</span>
@@ -760,7 +760,7 @@ function Debts() {
                     <button
                       type="button"
                       onClick={() => setSelectedDebt(debt)}
-                      className="rounded-full bg-slate-900 p-3 text-white transition hover:bg-cyan-600 active:scale-95"
+                      className="min-h-12 min-w-12 rounded-full bg-slate-900 p-3 text-white transition hover:bg-cyan-600 active:scale-95"
                       aria-label={`View ${debt.customerName} utang details`}
                     >
                       <ChevronRight size={18} />

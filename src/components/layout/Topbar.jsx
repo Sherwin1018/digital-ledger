@@ -145,8 +145,8 @@ function Topbar({ showMenuButton, onMenuClick }) {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between bg-white px-4 py-4 shadow sm:px-6">
-      <div className="flex items-center">
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 bg-white px-4 py-4 shadow sm:px-6">
+      <div className="flex min-w-0 items-center">
         {showMenuButton && (
           <button
             type="button"
@@ -158,10 +158,10 @@ function Topbar({ showMenuButton, onMenuClick }) {
           </button>
         )}
 
-        <h1 className="text-2xl font-bold text-slate-700">{title}</h1>
+        <h1 className="truncate text-xl font-bold text-slate-700 sm:text-2xl">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         <HeadlessMenu as="div" className="relative">
           <HeadlessMenu.Button
             type="button"

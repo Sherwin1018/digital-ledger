@@ -90,7 +90,7 @@ function DashboardLayout({ children }) {
           onMenuClick={handleSidebarToggle}
         />
 
-        <main className="p-6">{children}</main>
+        <main className="p-4 sm:p-6">{children}</main>
       </div>
 
       {transitionState.visible && (

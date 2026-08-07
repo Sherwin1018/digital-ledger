@@ -439,13 +439,13 @@ function Reports() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <section className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
+          <label className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <CalendarRange size={18} className="text-slate-400" />
             <select
               value={reportType}
               onChange={(event) => setReportType(event.target.value)}
-              className="bg-transparent text-sm font-medium text-slate-700 outline-none"
+              className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none"
             >
               {reportOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -459,7 +459,7 @@ function Reports() {
             type="button"
             onClick={handlePdfExport}
             disabled={loading || Boolean(firebaseConfigError)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             <FileText size={18} />
             PDF
@@ -469,7 +469,7 @@ function Reports() {
             type="button"
             onClick={handleExcelExport}
             disabled={loading || Boolean(firebaseConfigError)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             <FileSpreadsheet size={18} />
             Excel
@@ -479,7 +479,7 @@ function Reports() {
             type="button"
             onClick={handlePrint}
             disabled={loading || Boolean(firebaseConfigError)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             <Printer size={18} />
             Print

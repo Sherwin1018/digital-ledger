@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, CalendarDays, Search } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
+import PaginationControls from "../../components/PaginationControls";
 import { firebaseConfigError } from "../../firebase/firebase";
 import { getCustomers } from "../../services/customersService";
 import { getDebts } from "../../services/debtsService";
 import { getPayments } from "../../services/paymentsService";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import { reconcileLedger } from "../../utils/ledgerReconciliation";
+
+const PAGE_SIZE = 25;
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
@@ -134,6 +137,7 @@ function Archives() {
   const [yearFilter, setYearFilter] = useState("");
   const [loading, setLoading] = useState(!firebaseConfigError);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
 
   async function loadData() {
     setLoading(true);
@@ -197,6 +201,10 @@ function Archives() {
     () => [...new Set(archivedGroups.map((debt) => getYearKey(debt.date)).filter(Boolean))],
     [archivedGroups],
   );
+  const paginatedArchives = useMemo(
+    () => filteredArchives.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredArchives, page],
+  );
 
   function getPaymentsForDebtGroup(debt) {
     const debtIds = new Set(debt.debtIds || [debt.id]);
@@ -212,12 +220,15 @@ function Archives() {
     <DashboardLayout>
       <div className="space-y-6">
         <section className="grid gap-3 xl:grid-cols-[1.2fr_repeat(4,minmax(0,0.7fr))]">
-          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <label className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <Search size={18} className="text-slate-400" />
             <input
               type="text"
               value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search archived paid debts"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
             />
@@ -225,7 +236,10 @@ function Archives() {
 
           <select
             value={customerFilter}
-            onChange={(event) => setCustomerFilter(event.target.value)}
+            onChange={(event) => {
+              setCustomerFilter(event.target.value);
+              setPage(1);
+            }}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm outline-none"
           >
             <option value="">All customers</option>
@@ -239,20 +253,29 @@ function Archives() {
           <input
             type="date"
             value={dateFilter}
-            onChange={(event) => setDateFilter(event.target.value)}
+            onChange={(event) => {
+              setDateFilter(event.target.value);
+              setPage(1);
+            }}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm outline-none"
           />
 
           <input
             type="month"
             value={monthFilter}
-            onChange={(event) => setMonthFilter(event.target.value)}
+            onChange={(event) => {
+              setMonthFilter(event.target.value);
+              setPage(1);
+            }}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm outline-none"
           />
 
           <select
             value={yearFilter}
-            onChange={(event) => setYearFilter(event.target.value)}
+            onChange={(event) => {
+              setYearFilter(event.target.value);
+              setPage(1);
+            }}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm outline-none"
           >
             <option value="">All years</option>
@@ -306,7 +329,7 @@ function Archives() {
               No paid debts found.
             </div>
           ) : (
-            filteredArchives.map((debt) => (
+            paginatedArchives.map((debt) => (
               <article key={debt.id} className="rounded-3xl bg-white p-5 shadow-md">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -400,7 +423,7 @@ function Archives() {
                     </td>
                   </tr>
                 ) : (
-                  filteredArchives.map((debt) => (
+                  paginatedArchives.map((debt) => (
                     <tr key={debt.id} className="text-sm text-slate-700">
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
                         {debt.transactionId}
@@ -460,6 +483,13 @@ function Archives() {
             </table>
           </div>
         </section>
+
+        <PaginationControls
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalItems={filteredArchives.length}
+          onPageChange={setPage}
+        />
       </div>
     </DashboardLayout>
   );
