@@ -179,11 +179,8 @@ async function addPayment(entry) {
     }
 
     const paymentNumber = await getNextDisplayNumber(transaction, "payments");
-    let unappliedAmount = Number(Math.min(amount, customerPreviousBalance).toFixed(2));
-    const appliedAmount = unappliedAmount;
-    const overpaymentAmount = Number(Math.max(amount - customerPreviousBalance, 0).toFixed(2));
-    const changeDue = overpaymentAction === OVERPAYMENT_CHANGE ? overpaymentAmount : 0;
-    const advanceCreditAmount = overpaymentAction === OVERPAYMENT_ADVANCE ? overpaymentAmount : 0;
+    const expectedAppliedAmount = Number(Math.min(amount, customerPreviousBalance).toFixed(2));
+    let unappliedAmount = expectedAppliedAmount;
     const allocations = [];
     const now = Timestamp.now();
 
@@ -219,6 +216,17 @@ async function addPayment(entry) {
       throw new Error("No unpaid utang could be found for this customer.");
     }
 
+    const appliedAmount = Number(
+      allocations.reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0).toFixed(2),
+    );
+
+    if (appliedAmount < expectedAppliedAmount) {
+      throw new Error("Utang changed while recording payment. Reload the ledger, then try again.");
+    }
+
+    const overpaymentAmount = Number(Math.max(amount - customerPreviousBalance, 0).toFixed(2));
+    const changeDue = overpaymentAction === OVERPAYMENT_CHANGE ? overpaymentAmount : 0;
+    const advanceCreditAmount = overpaymentAction === OVERPAYMENT_ADVANCE ? overpaymentAmount : 0;
     const customerRemainingBalance = Number(Math.max(customerPreviousBalance - appliedAmount, 0).toFixed(2));
     const status = customerRemainingBalance <= 0 ? STATUS_PAID : STATUS_UNPAID;
     const customerName =
